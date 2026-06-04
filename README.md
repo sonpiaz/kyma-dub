@@ -1,46 +1,47 @@
-# dub-cli
+# kyma-dub
 
-Dub any video into another language with a natural, **time-aligned** AI voiceover — from the terminal.
+Dub any video into another language with a natural, **time-aligned** AI voiceover — from the terminal, all on one [Kyma](https://kymaapi.com) key.
 
 ```bash
-dub talk.mp4 --from vi --voice charlie
+kyma-dub talk.mp4 --from vi --voice charlie
 # -> talk [EN dub].mp4
 ```
 
 It transcribes the source, translates it to the target language *fitted to the original timing*, speaks it in a natural voice, and muxes the new audio back over the original video. The narration tracks what's on screen — it doesn't drift.
 
-Built the same way as [watch-cli](https://github.com/sonpiaz/watch-cli): use it yourself, ship it open-source, and dogfood [Kyma](https://kymaapi.com) for the AI calls.
+Built the same way as [watch-cli](https://github.com/sonpiaz/watch-cli): use it yourself, ship it open-source, and run every AI call through Kyma — transcribe, translate, and voice on a single key.
 
 ## Install
 
 ```bash
-curl -fsSL https://github.com/sonpiaz/dub-cli/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/sonpiaz/kyma-dub/releases/latest/download/install.sh | bash
 ```
 
-Then set your keys (one Kyma key + one ElevenLabs key):
+Then set one key:
 
 ```bash
-# ~/.config/dub-cli/env  (created by the installer)
-KYMA_API_KEY=kyma-xxxxxxxx        # transcription + translation
-ELEVENLABS_API_KEY=xi-xxxxxxxx    # the voice
+# ~/.config/kyma-dub/env  (created by the installer)
+KYMA_API_KEY=kyma-xxxxxxxx        # transcribe + translate + voice
+# ELEVENLABS_API_KEY=xi-xxxxxxxx  # optional: direct TTS path / deep fallback
 ```
 
 Get a Kyma key at [kymaapi.com](https://kymaapi.com) — 60 seconds, no card, free credit at signup.
 
 **Dependencies:** `ffmpeg`, `ffprobe`, `curl`, `python3` (`brew install ffmpeg`).
 
-## Usage
+## Dub
 
 ```bash
-dub <video> [options]
+kyma-dub <video> [options]
 
   --from <lang>            source language code (default: auto-detect)
   --to <lang>              target language code (default: en)
   --voice <name|id>        charlie | will | liam | brian | rachel | adam | jessica
-                           or a raw ElevenLabs voice id (default: charlie)
-  --tts <engine>           elevenlabs (default, best v3) | kyma
-  --model <id>             translation model via Kyma (default: best)
-  --wps <n>                target words/second for timing (default: 2.4)
+                           or any voice id from `kyma-dub voices` (default: charlie)
+  --tts <engine>           kyma (default — one key, eleven-v3) | elevenlabs (direct)
+  --model <id>             translation model (default: qwen-3.7-max)
+  --max-speed <n>          max voice speed-up to fit a slot (default: 1.5)
+  --chunk-sec <n>          max seconds per dub chunk (default: 22)
   --allow-voice-fallback   permit an independent MiniMax voice if every
                            ElevenLabs path is down (CHANGES the voice)
   --out <path>             output file
@@ -48,59 +49,65 @@ dub <video> [options]
   --version / -h
 ```
 
-Examples:
+## Discover (the live "door")
+
+Models and voices on Kyma evolve. These query the **live** catalog so you (or an agent) always recommend what's current and matched to the audience:
 
 ```bash
-dub talk.mp4                          # auto -> English, voice charlie
-dub talk.mp4 --voice will             # a younger, friendlier voice
-dub talk.mp4 --to es --voice rachel   # dub to Spanish
-dub talk.mp4 --tts kyma               # route TTS through Kyma (one key)
+kyma-dub models                                   # translation models on Kyma now
+kyma-dub voices --gender female --age young --use-case social_media
+kyma-dub voices --library --lang es               # search the shared voice library
+kyma-dub preview <voice|id> ["sample text"]       # hear a voice before committing
+kyma-dub recommend --for "young female, energetic, for TikTok" --smart
+kyma-dub whatsnew                                 # what Kyma added since last check
 ```
+
+Voice labels you can filter on: `gender`, `age`, `accent`, `use-case`, `descriptive`, `language`. `--smart` lets a Kyma model pick from the free-text need.
 
 ## How it works
 
 ```
 video ─▶ extract audio (ffmpeg)
-      ─▶ transcribe + timestamps (Whisper)
+      ─▶ transcribe + timestamps (Kyma whisper-v3-turbo)
       ─▶ group into chunks at natural speech pauses
-      ─▶ translate each chunk, fitting word count to its seconds (LLM)
+      ─▶ translate each chunk, fitted to its seconds (Kyma LLM)
       ─▶ TTS each chunk with a locked voice engine
-      ─▶ time-stretch each clip to its slot, reassemble on the original timeline
+      ─▶ speed each clip ONLY up to fit its slot, reassemble on the timeline
       ─▶ mux new audio over the original video
 ```
 
-The trick that keeps it in sync: it never translates-then-reads one long block (that drifts). It translates, voices, and time-stretches **per chunk anchored to the original timestamps**, so the voiceover lands where the speaker was.
+Two things keep it in sync and natural:
+
+1. **Per-chunk timestamp anchoring** — it never translates-then-reads one long block (that drifts). Each chunk is voiced and placed at its original timestamp.
+2. **Speed-up-only isochrony** — a chunk is only ever sped up to fit its slot (capped at `--max-speed`), **never slowed** (slowing drags the audio and feels delayed). Leftover slot time becomes a natural pause. Translation length is budgeted per chunk using a per-language characters-per-second model, so it generalises across languages (dense CJK/Thai vs verbose Latin scripts).
 
 ## Routing & fallback
-
-Two gates dogfood Kyma; the voice uses ElevenLabs directly for v3 quality.
 
 By default the **whole pipeline runs on one Kyma key** (transcribe + translate + voice):
 
 | Step | Default route | Notes |
 |---|---|---|
 | Transcribe | Kyma `whisper-v3-turbo` (or Groq direct) | timestamps |
-| Translate | Kyma `best` | fitted to timing |
-| TTS | Kyma `eleven-v3` | best, expressive — one key |
+| Translate | Kyma `qwen-3.7-max` | fitted to timing |
+| TTS | Kyma `eleven-v3` | expressive — one key |
 
-Pass `--tts elevenlabs` to send TTS straight to ElevenLabs `eleven_v3` (one less hop; needs `ELEVENLABS_API_KEY`). Either way the audio is the same v3 voice.
+Pass `--tts elevenlabs` to voice straight from ElevenLabs (needs `ELEVENLABS_API_KEY`; one less hop). Either way it's the same v3 voice.
 
-The TTS engine is **locked once at job start** so the voice never changes mid-video. The fallback chain (each tried in order on a synth probe):
+The TTS engine is **locked once at job start** so the voice never changes mid-video. The fallback chain (tried in order on a synth probe):
 
 | # | Engine | Voice | Covers |
 |---|---|---|---|
-| 1 | ElevenLabs v3 (direct) | preserved | default |
-| 2 | ElevenLabs multilingual-v2 (direct) | preserved | v3 flakiness / rate limits |
-| 3 | Kyma → eleven-v3 | preserved | local ElevenLabs key/network down — **same v3 quality** |
-| 4 | Kyma → eleven-multilingual-v2 | preserved | Kyma v3 backend issue |
+| 1 | Kyma → eleven-v3 | preserved | default (one key) |
+| 2 | Kyma → eleven-multilingual-v2 | preserved | Kyma v3 backend issue |
+| 3 | ElevenLabs v3 (direct) | preserved | Kyma TTS down (needs `ELEVENLABS_API_KEY`) |
+| 4 | ElevenLabs multilingual-v2 (direct) | preserved | v3 direct issue |
 | 5 | Kyma → minimax-speech-hd | **changes** | full ElevenLabs outage — opt-in via `--allow-voice-fallback` |
 
-Layers 1–4 ultimately reach ElevenLabs (1–2 direct, 3–4 via Kyma), so a *full* ElevenLabs outage leaves only layer 5 — an independent provider (MiniMax), at the cost of a different speaker. That's why it's opt-in: the tool refuses to silently swap the voice.
+(`--tts elevenlabs` puts the two direct engines first.) Layers 1–4 ultimately reach ElevenLabs, so a *full* ElevenLabs outage leaves only layer 5 — an independent provider (MiniMax), at the cost of a different speaker. That's why it's opt-in: the tool refuses to silently swap the voice.
 
 ## Notes & limits
 
 - Best for narration / presentation / b-roll. It replaces audio only — **no lip-sync**. For talking-head where mouths must match, use a lip-sync product (HeyGen, Sync.so).
-- English usually runs ~20% shorter than Vietnamese; each chunk is stretched within a natural range (0.7–1.6×) to fit. Extreme mismatches log a tempo near the clamp.
 - Background music is replaced along with speech. Source-separation (keep the music bed) is not in v0.1.
 
 ## License

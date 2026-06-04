@@ -1,28 +1,23 @@
 #!/usr/bin/env bash
-# Shared env loader for dub-cli.
+# Shared env loader for kyma-dub.
 #
 # Discovery order:
 #   1. process env (already exported)
 #   2. ./.env in current working directory
-#   3. ~/.config/dub-cli/env
+#   3. ~/.config/kyma-dub/env
 #   4. ~/kyma-api/.env  (Son's canonical key store — convenience only)
 #
-# Routing:
-#   - Transcribe + translate: Kyma mode (recommended) when KYMA_API_KEY
-#     is set → api.kymaapi.com. One key opens the STT + LLM gates.
-#     Direct/BYOK fallback: GROQ_API_KEY (transcribe) + a Kyma key is
-#     still required for translation today.
-#   - TTS: ElevenLabs direct (best quality, model eleven_v3) when
-#     ELEVENLABS_API_KEY is set; otherwise routed through Kyma. A
-#     provider-independent last-resort TTS (MiniMax via Kyma) only
-#     engages with --allow-voice-fallback because it changes the voice.
+# Routing (default = everything on one Kyma key):
+#   - Transcribe + translate + TTS all run through Kyma (api.kymaapi.com).
+#     ELEVENLABS_API_KEY is optional — used as a direct TTS path / deep
+#     fallback. GROQ_API_KEY is an optional direct STT fallback.
 
-[[ -n "${DUB_CLI_ENV_LOADED:-}" ]] && return 0
-export DUB_CLI_ENV_LOADED=1
+[[ -n "${KYMA_DUB_ENV_LOADED:-}" ]] && return 0
+export KYMA_DUB_ENV_LOADED=1
 
 # shellcheck source=version.sh
 source "$(dirname "${BASH_SOURCE[0]}")/version.sh"
-export DUB_CLI_USER_AGENT="dub-cli/${DUB_CLI_VERSION}"
+export KYMA_DUB_USER_AGENT="kyma-dub/${KYMA_DUB_VERSION}"
 
 _load_dotenv() {
   local file="$1"
@@ -39,35 +34,31 @@ _load_dotenv() {
 }
 
 _load_dotenv "./.env"
-_load_dotenv "$HOME/.config/dub-cli/env"
+_load_dotenv "$HOME/.config/kyma-dub/env"
 _load_dotenv "$HOME/kyma-api/.env"
 
-export DUB_KYMA_BASE="${DUB_KYMA_BASE:-https://api.kymaapi.com}"
+export KYMA_DUB_BASE="${KYMA_DUB_BASE:-https://api.kymaapi.com}"
 
 # Determine routing mode for the STT + translate gates.
 if [[ -n "${KYMA_API_KEY:-}" ]]; then
-  export DUB_MODE="kyma"
+  export KYMA_DUB_MODE="kyma"
 elif [[ -n "${GROQ_API_KEY:-}" ]]; then
-  export DUB_MODE="direct"   # transcribe via Groq; translate still needs a Kyma key
+  export KYMA_DUB_MODE="direct"   # transcribe via Groq; translate still needs a Kyma key
 else
-  export DUB_MODE="none"
+  export KYMA_DUB_MODE="none"
 fi
 
-dub_keys_check() {
-  if [[ "$DUB_MODE" == "none" ]]; then
-    echo "[dub] No API key found for transcription/translation." >&2
-    echo "[dub] Recommended: get a Kyma key at https://kymaapi.com (60s, no card)." >&2
-    echo "[dub]   export KYMA_API_KEY=kyma-xxxxxxxx" >&2
-    echo "[dub] Or set GROQ_API_KEY for transcription (translation still needs KYMA_API_KEY)." >&2
+kyma_dub_keys_check() {
+  if [[ "$KYMA_DUB_MODE" == "none" ]]; then
+    echo "[kyma-dub] No API key found." >&2
+    echo "[kyma-dub] Recommended: get a Kyma key at https://kymaapi.com (60s, no card)." >&2
+    echo "[kyma-dub]   export KYMA_API_KEY=kyma-xxxxxxxx" >&2
+    echo "[kyma-dub] One key runs transcribe + translate + voice." >&2
     return 1
   fi
-  if [[ "$DUB_MODE" == "direct" && -z "${KYMA_API_KEY:-}" ]]; then
-    echo "[dub] GROQ_API_KEY found but KYMA_API_KEY is missing — translation runs through Kyma." >&2
-    echo "[dub] Get a Kyma key at https://kymaapi.com or export KYMA_API_KEY." >&2
-    return 1
-  fi
-  if [[ -z "${ELEVENLABS_API_KEY:-}" && -z "${KYMA_API_KEY:-}" ]]; then
-    echo "[dub] No TTS provider: set ELEVENLABS_API_KEY (best, eleven_v3) or KYMA_API_KEY." >&2
+  if [[ "$KYMA_DUB_MODE" == "direct" && -z "${KYMA_API_KEY:-}" ]]; then
+    echo "[kyma-dub] GROQ_API_KEY found but KYMA_API_KEY is missing — translation + TTS run through Kyma." >&2
+    echo "[kyma-dub] Get a Kyma key at https://kymaapi.com or export KYMA_API_KEY." >&2
     return 1
   fi
   return 0

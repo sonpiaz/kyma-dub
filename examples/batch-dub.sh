@@ -9,5 +9,5 @@ shopt -s nullglob
 for f in "$DIR"/*.mp4; do
   case "$f" in *"[ "*"dub]"*.mp4) continue ;; esac   # skip already-dubbed outputs
   echo "==> dubbing: $f"
-  dub "$f" --to "$LANG" --voice "$VOICE"
+  kyma-dub "$f" --to "$LANG" --voice "$VOICE"
 done

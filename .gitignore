@@ -3,6 +3,7 @@
 *.mp4
 *.mp3
 *.wav
+kyma-dub-preview-*.mp3
 __pycache__/
 *.pyc
 .DS_Store

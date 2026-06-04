@@ -54,7 +54,7 @@ MIN_SPEED = 1.0
 DEFAULT_MAX_SPEED = 1.5
 
 
-def log(m): print(f"[dub] {m}", file=sys.stderr, flush=True)
+def log(m): print(f"[kyma-dub] {m}", file=sys.stderr, flush=True)
 def die(m, code=1): log("error: " + m); sys.exit(code)
 def ffprobe_dur(f):
     return float(subprocess.check_output(
