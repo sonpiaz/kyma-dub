@@ -40,9 +40,10 @@ mux into the video.
 ## Routing
 - transcribe + translate: Kyma (`KYMA_API_KEY`) or Groq direct for STT.
 - TTS engine chain (locked at job start so the voice never changes
-  mid-video): ElevenLabs v3 → ElevenLabs v2 → Kyma eleven-multilingual-v2
-  (voice preserved) → Kyma minimax-speech-hd (voice CHANGES, only with
-  `--allow-voice-fallback`).
+  mid-video): ElevenLabs v3 (direct) → ElevenLabs v2 (direct) → Kyma
+  eleven-v3 → Kyma eleven-multilingual-v2 (all voice-preserved) → Kyma
+  minimax-speech-hd (voice CHANGES, only with `--allow-voice-fallback`).
+  `--tts kyma` runs everything on one Kyma key (Kyma eleven-v3).
 
 ## Keys
 `KYMA_API_KEY` (recommended) + `ELEVENLABS_API_KEY` (best voice). Read from

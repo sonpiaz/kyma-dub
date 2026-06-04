@@ -189,10 +189,11 @@ def tts_bytes(cfg, engine, text):
                 "voice_settings": {"stability": 0.4, "similarity_boost": 0.8,
                                    "use_speaker_boost": True}}
         return _http_bytes(f"https://api.elevenlabs.io/v1/text-to-speech/{cfg['voice_id']}", body, headers)
-    if engine == "kyma_eleven":
+    if engine in ("kyma_v3", "kyma_eleven"):
+        model = "eleven-v3" if engine == "kyma_v3" else "eleven-multilingual-v2"
         headers = {"Authorization": "Bearer " + cfg["kyma_key"], "Content-Type": "application/json",
                    "User-Agent": cfg["ua"]}
-        body = {"model": "eleven-multilingual-v2", "input": text, "voice": cfg["voice_id"]}
+        body = {"model": model, "input": text, "voice": cfg["voice_id"]}
         return _http_bytes(cfg["kyma_base"] + "/v1/audio/speech", body, headers)
     if engine == "kyma_minimax":
         headers = {"Authorization": "Bearer " + cfg["kyma_key"], "Content-Type": "application/json",
@@ -206,13 +207,13 @@ def build_engine_chain(cfg):
     chain = []
     if cfg["tts"] == "kyma":
         if cfg.get("kyma_key"):
-            chain += ["kyma_eleven"]
+            chain += ["kyma_v3", "kyma_eleven"]   # v3 via Kyma, then v2 via Kyma
     else:  # elevenlabs (default)
         if cfg.get("eleven_key"):
-            chain += ["eleven_v3", "eleven_v2"]
+            chain += ["eleven_v3", "eleven_v2"]    # direct, best
         if cfg.get("kyma_key"):
-            chain += ["kyma_eleven"]
-    # voice-changing last resort, opt-in only
+            chain += ["kyma_v3", "kyma_eleven"]    # same voice via Kyma
+    # voice-changing last resort, opt-in only (independent provider)
     if cfg.get("allow_voice_fallback") and cfg.get("kyma_key"):
         chain += ["kyma_minimax"]
     return chain

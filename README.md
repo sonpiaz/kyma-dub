@@ -79,18 +79,21 @@ Two gates dogfood Kyma; the voice uses ElevenLabs directly for v3 quality.
 |---|---|---|
 | Transcribe | Kyma `whisper-v3-turbo` (or Groq direct) | timestamps |
 | Translate | Kyma `best` | fitted to timing |
-| TTS | ElevenLabs `eleven_v3` | best, expressive |
+| TTS | ElevenLabs `eleven_v3` (direct) | best, expressive |
 
-The TTS engine is **locked once at job start** so the voice never changes mid-video. The fallback chain:
+`--tts kyma` routes TTS through Kyma's `eleven-v3` too — full **one-key** dubbing (transcribe + translate + voice all on a single Kyma key), same v3 quality.
+
+The TTS engine is **locked once at job start** so the voice never changes mid-video. The fallback chain (each tried in order on a synth probe):
 
 | # | Engine | Voice | Covers |
 |---|---|---|---|
 | 1 | ElevenLabs v3 (direct) | preserved | default |
 | 2 | ElevenLabs multilingual-v2 (direct) | preserved | v3 flakiness / rate limits |
-| 3 | Kyma → eleven-multilingual-v2 | preserved | local key/network issue |
-| 4 | Kyma → minimax-speech-hd | **changes** | full ElevenLabs outage — opt-in via `--allow-voice-fallback` |
+| 3 | Kyma → eleven-v3 | preserved | local ElevenLabs key/network down — **same v3 quality** |
+| 4 | Kyma → eleven-multilingual-v2 | preserved | Kyma v3 backend issue |
+| 5 | Kyma → minimax-speech-hd | **changes** | full ElevenLabs outage — opt-in via `--allow-voice-fallback` |
 
-Layers 1–3 share the ElevenLabs upstream, so a full ElevenLabs outage only leaves layer 4 — an independent provider, at the cost of a different speaker. That's why it's opt-in: the tool refuses to silently swap the voice.
+Layers 1–4 ultimately reach ElevenLabs (1–2 direct, 3–4 via Kyma), so a *full* ElevenLabs outage leaves only layer 5 — an independent provider (MiniMax), at the cost of a different speaker. That's why it's opt-in: the tool refuses to silently swap the voice.
 
 ## Notes & limits
 
