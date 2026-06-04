@@ -28,15 +28,15 @@ npm run build
 {
   "mcpServers": {
     "kyma-dub": {
-      "command": "node",
-      "args": ["/absolute/path/to/kyma-dub/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@sonpiaz/kyma-dub-mcp"],
       "env": { "KYMA_API_KEY": "kyma-xxxxxxxx" }
     }
   }
 }
 ```
 
-(Once published: `"command": "npx", "args": ["-y", "@sonpiaz/kyma-dub-mcp"]`.)
+Published on npm: [`@sonpiaz/kyma-dub-mcp`](https://www.npmjs.com/package/@sonpiaz/kyma-dub-mcp). (For local dev, point `command` to `node` + `dist/index.js` instead.)
 
 ## Tools
 
