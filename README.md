@@ -105,6 +105,10 @@ The TTS engine is **locked once at job start** so the voice never changes mid-vi
 
 (`--tts elevenlabs` puts the two direct engines first.) Layers 1–4 ultimately reach ElevenLabs, so a *full* ElevenLabs outage leaves only layer 5 — an independent provider (MiniMax), at the cost of a different speaker. That's why it's opt-in: the tool refuses to silently swap the voice.
 
+## Desktop (MCP)
+
+Use kyma-dub from Claude desktop, Cursor, or ChatGPT desktop via the bundled MCP server in [`mcp-server/`](mcp-server/) — it exposes dubbing (job-based) plus live `list_models` / `list_voices` / `recommend_voice` / `preview_voice` / `whatsnew` tools and `kyma-dub://models` + `kyma-dub://voices` resources. See [mcp-server/README.md](mcp-server/README.md).
+
 ## Notes & limits
 
 - Best for narration / presentation / b-roll. It replaces audio only — **no lip-sync**. For talking-head where mouths must match, use a lip-sync product (HeyGen, Sync.so).

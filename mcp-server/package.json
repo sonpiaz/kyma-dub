@@ -1,0 +1,38 @@
+{
+  "name": "@sonpiaz/kyma-dub-mcp",
+  "version": "0.1.0",
+  "mcpName": "io.github.sonpiaz/kyma-dub",
+  "description": "Dub a video into another language with a natural, time-aligned AI voiceover — plus live model/voice discovery. MCP stdio server for kyma-dub.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "kyma-dub-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "homepage": "https://github.com/sonpiaz/kyma-dub",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonpiaz/kyma-dub.git",
+    "directory": "mcp-server"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "model-context-protocol", "kyma-dub", "dubbing", "tts", "translation", "agent"]
+}
