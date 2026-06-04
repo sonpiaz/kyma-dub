@@ -38,6 +38,21 @@ LANG_NAMES = {"en": "English", "vi": "Vietnamese", "es": "Spanish", "fr": "Frenc
               "de": "German", "ja": "Japanese", "ko": "Korean", "zh": "Chinese",
               "pt": "Portuguese", "it": "Italian", "hi": "Hindi", "id": "Indonesian"}
 
+# Natural speaking rate in characters/second at speed 1.0, by language.
+# Logographic scripts pack ~1 syllable/char -> far fewer chars/sec; long-
+# compound languages sit lower than Latin scripts. (Same model as echoly.)
+SPEECH_CPS = {"zh": 5, "ja": 5, "ko": 5, "th": 6, "de": 13}
+DEFAULT_CPS = 15  # en, vi, es, fr, pt, id, it, hi, ...
+
+def chars_per_sec(lang):
+    return SPEECH_CPS.get((lang or "").lower().split("-")[0], DEFAULT_CPS)
+
+# Isochrony: only ever speed the voice UP to fit a slot, never slow it
+# down (slowing drags the audio and feels delayed). Leftover slot time
+# becomes a natural pause. Capped so dense lines don't go chipmunk.
+MIN_SPEED = 1.0
+DEFAULT_MAX_SPEED = 1.5
+
 
 def log(m): print(f"[dub] {m}", file=sys.stderr, flush=True)
 def die(m, code=1): log("error: " + m); sys.exit(code)
@@ -91,7 +106,9 @@ def transcribe(cfg, audio):
 
 
 # ── 3. chunk by natural speech pauses ───────────────────────────────
-def chunk_segments(segments, max_dur=15.0, gap_break=0.5, min_dur=4.0):
+def chunk_segments(segments, max_dur=22.0, gap_break=1.0, min_dur=8.0):
+    # Fewer, larger chunks pack the voice continuously and leave little
+    # dead air (smaller chunks scatter trailing silence -> feels laggy).
     chunks, cur = [], None
     for s in segments:
         st, en, tx = float(s["start"]), float(s["end"]), s["text"].strip()
@@ -115,21 +132,29 @@ def chunk_segments(segments, max_dur=15.0, gap_break=0.5, min_dur=4.0):
 def translate(cfg, chunks):
     src = LANG_NAMES.get(cfg["source_lang"], cfg["source_lang"])
     tgt = LANG_NAMES.get(cfg["target_lang"], cfg["target_lang"])
-    wps = cfg.get("wps", 2.4)
-    brief = [{"i": c["i"], "seconds": c["dur"], "source_text": c["vi"]} for c in chunks]
+    cps = chars_per_sec(cfg["target_lang"])
+    # Per-chunk budget the model must fit: a max_seconds slot plus a soft
+    # character ceiling derived from the target language's speaking rate.
+    # Seconds is the language-agnostic contract; char ceiling guides verbose
+    # vs dense scripts (CJK get far fewer chars than Latin for the same time).
+    brief = [{"i": c["i"], "max_seconds": c["dur"],
+              "max_chars": int(round(c["dur"] * cps)),
+              "source_text": c["vi"]} for c in chunks]
     sysp = (
         f"You are an expert video-dubbing scriptwriter. Convert a {src} transcript "
         f"(auto-transcribed, may contain ASR errors) into a natural, expressive {tgt} "
-        "voiceover, chunk by chunk, where EACH chunk must be spoken within a given "
-        "number of seconds.\n"
-        f"CRITICAL TIMING: natural {tgt} pace is about {wps} words/second. Each chunk's "
-        f"word count must be approximately seconds x {wps}. Never overshoot a chunk's "
-        "budget by more than ~10%. This keeps the dub synced to what is on screen.\n"
-        "STYLE: first person if the source is, warm confident speaker energy, natural "
-        "spoken language with contractions, NOT a literal translation. Add natural "
-        "rhythm and breathing with commas, em-dashes, and occasional ellipses so it "
-        "never sounds robotic. Vary sentence length. Fix obvious ASR errors using "
-        "context. Preserve any explicit ordering/numbering so it tracks the visuals.\n"
+        "voiceover, chunk by chunk. EACH chunk must be SPEAKABLE within its max_seconds "
+        "at a natural pace.\n"
+        "ISOCHRONY (critical for sync): make each translation short enough to be spoken "
+        "naturally within max_seconds. Use contraction and paraphrase for verbose "
+        "languages; stay at or under max_chars. It is far better to be slightly short "
+        "(a natural pause fills the rest) than too long. Never pad to fill time.\n"
+        "STYLE: keep first person if the source is, warm confident speaker energy, "
+        "natural spoken language with contractions, NOT a literal translation. Add "
+        "natural rhythm with commas, em-dashes, and occasional ellipses so it never "
+        "sounds robotic. Vary sentence length. Fix obvious ASR errors using context. "
+        "Preserve names, technical terms, and any explicit ordering/numbering so it "
+        "tracks the visuals.\n"
         'OUTPUT: JSON {"chunks":[{"i":<index>,"text":"<translated>"}, ...]} in the same '
         "order, one per input chunk. Output ONLY the JSON.")
     body = {"model": cfg["translate_model"], "temperature": 0.7,
@@ -229,28 +254,45 @@ def synth_chunk(cfg, engine, text, out_mp3, retries=2):
         "Refusing to swap voice mid-video.")
 
 
-# ── 6. fit each clip to its slot, 7. reassemble on timeline ─────────
-def fit_clip(raw, target, out_wav):
+# ── 6. fit each clip — speed UP only, never slow ────────────────────
+def speed_fit(raw, slot, max_speed, out_wav):
+    """Resample so spoken length fits the slot, but only by speeding up
+    (>=1.0). Shorter-than-slot audio is left alone — the gap becomes a
+    natural pause in assembly. Returns (speed, spoken_seconds)."""
     cd = ffprobe_dur(raw)
-    f = max(0.7, min(1.6, cd / target))     # clamp tempo so it stays natural
-    ff(["-i", raw, "-filter:a", f"atempo={f:.4f},apad", "-t", f"{target}",
-        "-ar", "44100", "-ac", "2", out_wav])
-    return f
+    speed = min(max_speed, max(MIN_SPEED, cd / slot if slot > 0 else MIN_SPEED))
+    if abs(speed - 1.0) < 0.01:
+        ff(["-i", raw, "-ar", "44100", "-ac", "2", out_wav])
+        return 1.0, cd
+    ff(["-i", raw, "-filter:a", f"atempo={speed:.4f}", "-ar", "44100", "-ac", "2", out_wav])
+    return speed, ffprobe_dur(out_wav)
 
+
+# ── 7. reassemble on the original timeline ──────────────────────────
+def _silence(workdir, idx, secs):
+    sil = os.path.join(workdir, f"sil_{idx}.wav")
+    ff(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{secs:.3f}", sil])
+    return sil
 
 def assemble(chunks, total_dur, workdir):
-    parts, prev_end = [], 0.0
+    # Anchor each clip at its start time; if the previous clip overran its
+    # slot (dense speech sped to the cap), push this one later instead of
+    # overlapping. Leftover time between clips is silence — no dragging.
+    parts, prev_end, overrun = [], 0.0, 0.0
     for c in chunks:
-        gap = c["start"] - prev_end
-        if gap > 0.05:
-            sil = os.path.join(workdir, f"sil_{c['i']}.wav")
-            ff(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{gap:.3f}", sil])
-            parts.append(sil)
-        parts.append(c["fit"]); prev_end = c["end"]
-    if total_dur - prev_end > 0.05:
-        sil = os.path.join(workdir, "sil_tail.wav")
-        ff(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{total_dur - prev_end:.3f}", sil])
-        parts.append(sil)
+        pos = max(c["start"], prev_end)
+        gap = pos - prev_end
+        if gap > 0.02:
+            parts.append(_silence(workdir, c["i"], gap))
+        elif pos > c["start"] + 0.05:
+            overrun += pos - c["start"]
+        parts.append(c["fit"])
+        prev_end = pos + c["spoken"]
+    if total_dur - prev_end > 0.02:
+        parts.append(_silence(workdir, "tail", total_dur - prev_end))
+    if overrun > 0.3:
+        log(f"⚠ {overrun:.1f}s of cumulative push from dense chunks (sped to the cap). "
+            "Raise --max-speed or let the translation be more concise to tighten sync.")
     listf = os.path.join(workdir, "concat.txt")
     with open(listf, "w") as fh:
         for p in parts:
@@ -278,16 +320,21 @@ def main():
         if cfg.get("source_lang", "auto") == "auto":
             cfg["source_lang"] = lang
         log(f"transcribed: {len(segs)} segments, source language={cfg['source_lang']}")
-        chunks = chunk_segments(segs)
+        chunks = chunk_segments(segs, max_dur=cfg.get("chunk_sec", 22.0))
+        if not chunks:
+            die("no speech chunks to dub")
         log(f"grouped into {len(chunks)} chunks")
         chunks = translate(cfg, chunks)
         engine = lock_engine(cfg)
+        max_speed = cfg.get("max_speed", DEFAULT_MAX_SPEED)
         for c in chunks:
             raw = os.path.join(workdir, f"raw_{c['i']}.mp3")
             synth_chunk(cfg, engine, c["en"], raw)
             c["fit"] = os.path.join(workdir, f"fit_{c['i']}.wav")
-            f = fit_clip(raw, c["dur"], c["fit"])
-            log(f"  chunk {c['i']:>2} {c['dur']:>5.1f}s atempo={f:.2f}")
+            speed, spoken = speed_fit(raw, c["dur"], max_speed, c["fit"])
+            c["spoken"] = spoken
+            tag = f"speed={speed:.2f}" if speed > 1.0 else f"+{c['dur'] - spoken:.1f}s pause"
+            log(f"  chunk {c['i']:>2} slot={c['dur']:>5.1f}s spoken={spoken:>5.1f}s {tag}")
         track = assemble(chunks, total_dur, workdir)
         mux(video, track, cfg["out"])
         log(f"done -> {cfg['out']}")

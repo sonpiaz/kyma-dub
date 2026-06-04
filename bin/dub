@@ -26,7 +26,8 @@ TARGET_LANG="en"
 VOICE="charlie"
 TTS="elevenlabs"
 TRANSLATE_MODEL="best"
-WPS="2.4"
+MAX_SPEED="1.5"
+CHUNK_SEC="22"
 OUT=""
 KEEP_TEMP=0
 ALLOW_VOICE_FALLBACK=0
@@ -45,7 +46,11 @@ Options:
                            or a raw ElevenLabs voice id (default: charlie)
   --tts <engine>           elevenlabs (default, best quality v3) | kyma
   --model <id>             translation model via Kyma (default: best)
-  --wps <n>                target words/second for timing (default: 2.4)
+  --max-speed <n>          max voice speed-up to fit a slot (default: 1.5).
+                           The voice is never slowed below 1.0 — leftover
+                           time becomes a natural pause.
+  --chunk-sec <n>          max seconds per dub chunk (default: 22). Smaller
+                           = tighter sync; larger = smoother flow.
   --allow-voice-fallback   if all ElevenLabs paths fail, fall back to an
                            independent MiniMax voice (CHANGES the voice)
   --out <path>             output file (default: "<name> [<LANG> dub].mp4")
@@ -71,7 +76,8 @@ while (($# > 0)); do
     --voice) VOICE="$2"; shift 2 ;;
     --tts) TTS="$2"; shift 2 ;;
     --model) TRANSLATE_MODEL="$2"; shift 2 ;;
-    --wps) WPS="$2"; shift 2 ;;
+    --max-speed) MAX_SPEED="$2"; shift 2 ;;
+    --chunk-sec) CHUNK_SEC="$2"; shift 2 ;;
     --allow-voice-fallback) ALLOW_VOICE_FALLBACK=1; shift ;;
     --out) OUT="$2"; shift 2 ;;
     --keep-temp) KEEP_TEMP=1; shift ;;
@@ -138,7 +144,8 @@ json.dump({
  "minimax_voice": "English_expressive_narrator",
  "tts": "$TTS",
  "translate_model": "$TRANSLATE_MODEL",
- "wps": float("$WPS"),
+ "max_speed": float("$MAX_SPEED"),
+ "chunk_sec": float("$CHUNK_SEC"),
  "allow_voice_fallback": bool($ALLOW_VOICE_FALLBACK),
  "keep_temp": bool($KEEP_TEMP),
 }, open(sys.argv[1],"w"))
