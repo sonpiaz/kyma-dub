@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# dub <video> [options] — time-aligned AI video dubbing.
+#
+# Transcribes the source video, translates it to the target language
+# fitted to the original timing, speaks it with a natural voice, and
+# muxes the new audio back over the original video.
+#
+# Examples:
+#   dub talk.mp4                              # Vietnamese -> English, voice charlie
+#   dub talk.mp4 --voice will                 # different voice
+#   dub talk.mp4 --to es --voice rachel       # dub to Spanish
+#   dub talk.mp4 --tts kyma                   # route TTS through Kyma (one key)
+#   dub talk.mp4 --allow-voice-fallback       # permit MiniMax voice if ElevenLabs is down
+#
+# See README.md for the full routing + fallback model.
+
+set -euo pipefail
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/env.sh
+source "$SELF_DIR/lib/env.sh"
+
+# ── defaults ──
+SOURCE_LANG="auto"
+TARGET_LANG="en"
+VOICE="charlie"
+TTS="elevenlabs"
+TRANSLATE_MODEL="best"
+WPS="2.4"
+OUT=""
+KEEP_TEMP=0
+ALLOW_VOICE_FALLBACK=0
+
+usage() {
+  cat <<'EOF'
+dub — time-aligned AI video dubbing
+
+Usage:
+  dub <video> [options]
+
+Options:
+  --from <lang>            source language code (default: auto-detect)
+  --to <lang>              target language code (default: en)
+  --voice <name|id>        voice: charlie|will|liam|brian|rachel|adam|jessica
+                           or a raw ElevenLabs voice id (default: charlie)
+  --tts <engine>           elevenlabs (default, best quality v3) | kyma
+  --model <id>             translation model via Kyma (default: best)
+  --wps <n>                target words/second for timing (default: 2.4)
+  --allow-voice-fallback   if all ElevenLabs paths fail, fall back to an
+                           independent MiniMax voice (CHANGES the voice)
+  --out <path>             output file (default: "<name> [<LANG> dub].mp4")
+  --keep-temp              keep intermediate files for debugging
+  --version                print version and exit
+  -h, --help               show this help
+
+Routing:
+  transcribe + translate -> Kyma (one key) or Groq direct for STT.
+  TTS engine chain (locked once per job to keep one voice):
+    1 ElevenLabs eleven_v3  2 ElevenLabs multilingual_v2
+    3 Kyma eleven-multilingual-v2   [voice preserved]
+    4 Kyma minimax-speech-hd        [voice changes — needs --allow-voice-fallback]
+EOF
+}
+
+# ── parse args ──
+VIDEO=""
+while (($# > 0)); do
+  case "$1" in
+    --from) SOURCE_LANG="$2"; shift 2 ;;
+    --to) TARGET_LANG="$2"; shift 2 ;;
+    --voice) VOICE="$2"; shift 2 ;;
+    --tts) TTS="$2"; shift 2 ;;
+    --model) TRANSLATE_MODEL="$2"; shift 2 ;;
+    --wps) WPS="$2"; shift 2 ;;
+    --allow-voice-fallback) ALLOW_VOICE_FALLBACK=1; shift ;;
+    --out) OUT="$2"; shift 2 ;;
+    --keep-temp) KEEP_TEMP=1; shift ;;
+    --version) echo "$DUB_CLI_VERSION_STRING"; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "[dub] unknown flag: $1" >&2; echo; usage; exit 64 ;;
+    *) VIDEO="$1"; shift ;;
+  esac
+done
+
+[[ -z "$VIDEO" ]] && { usage; exit 64; }
+[[ -f "$VIDEO" ]] || { echo "[dub] file not found: $VIDEO" >&2; exit 66; }
+
+# ── deps ──
+missing=()
+for cmd in ffmpeg ffprobe curl python3; do
+  command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+done
+if ((${#missing[@]} > 0)); then
+  echo "[dub] missing dependencies: ${missing[*]}" >&2
+  echo "  macOS:  brew install ffmpeg" >&2
+  echo "  Debian: sudo apt install ffmpeg curl python3" >&2
+  exit 1
+fi
+
+dub_keys_check || exit 1
+
+# ── resolve voice name -> ElevenLabs id ──
+VOICE_ID="$(python3 - "$VOICE" <<'PY'
+import sys
+v=sys.argv[1].strip()
+m={"charlie":"IKne3meq5aSn9XLyUdCD","will":"bIHbv24MWmeRgasZH58o","liam":"TX3LPaxmHKxFdv7VOQHJ",
+   "brian":"nPczCjzI2devNBz1zQrb","rachel":"21m00Tcm4TlvDq8ikWAM","adam":"pNInz6obpgDQGcFmaJgB",
+   "jessica":"cgSgspJ2msm6clMCkdW9"}
+print(m.get(v.lower(), v))   # passthrough when already a raw id
+PY
+)"
+
+# ── default output name ──
+if [[ -z "$OUT" ]]; then
+  dir="$(dirname "$VIDEO")"; base="$(basename "${VIDEO%.*}")"
+  upper_lang="$(echo "$TARGET_LANG" | tr '[:lower:]' '[:upper:]')"
+  OUT="$dir/$base [$upper_lang dub].mp4"
+fi
+
+# ── build config + run pipeline ──
+CFG="$(mktemp -t dub-cfg.XXXXXX.json)"
+trap 'rm -f "$CFG"' EXIT
+python3 - "$CFG" <<PY
+import json,sys,os
+json.dump({
+ "video": os.path.abspath("$VIDEO"),
+ "out": os.path.abspath("$OUT"),
+ "mode": "$DUB_MODE",
+ "kyma_base": "$DUB_KYMA_BASE",
+ "kyma_key": os.environ.get("KYMA_API_KEY",""),
+ "groq_key": os.environ.get("GROQ_API_KEY",""),
+ "eleven_key": os.environ.get("ELEVENLABS_API_KEY",""),
+ "ua": "$DUB_CLI_USER_AGENT",
+ "source_lang": "$SOURCE_LANG",
+ "target_lang": "$TARGET_LANG",
+ "voice": "$VOICE",
+ "voice_id": "$VOICE_ID",
+ "minimax_voice": "English_expressive_narrator",
+ "tts": "$TTS",
+ "translate_model": "$TRANSLATE_MODEL",
+ "wps": float("$WPS"),
+ "allow_voice_fallback": bool($ALLOW_VOICE_FALLBACK),
+ "keep_temp": bool($KEEP_TEMP),
+}, open(sys.argv[1],"w"))
+PY
+
+python3 "$SELF_DIR/lib/pipeline.py" "$CFG"
