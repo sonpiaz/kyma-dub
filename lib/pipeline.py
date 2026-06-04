@@ -205,14 +205,16 @@ def tts_bytes(cfg, engine, text):
 
 def build_engine_chain(cfg):
     chain = []
-    if cfg["tts"] == "kyma":
+    if cfg["tts"] == "kyma":  # default — dogfood everything on one Kyma key
         if cfg.get("kyma_key"):
-            chain += ["kyma_v3", "kyma_eleven"]   # v3 via Kyma, then v2 via Kyma
-    else:  # elevenlabs (default)
+            chain += ["kyma_v3", "kyma_eleven"]    # v3 via Kyma, then v2 via Kyma
         if cfg.get("eleven_key"):
-            chain += ["eleven_v3", "eleven_v2"]    # direct, best
+            chain += ["eleven_v3", "eleven_v2"]    # direct as deep fallback if Kyma TTS down
+    else:  # elevenlabs — TTS straight to ElevenLabs
+        if cfg.get("eleven_key"):
+            chain += ["eleven_v3", "eleven_v2"]
         if cfg.get("kyma_key"):
-            chain += ["kyma_v3", "kyma_eleven"]    # same voice via Kyma
+            chain += ["kyma_v3", "kyma_eleven"]
     # voice-changing last resort, opt-in only (independent provider)
     if cfg.get("allow_voice_fallback") and cfg.get("kyma_key"):
         chain += ["kyma_minimax"]

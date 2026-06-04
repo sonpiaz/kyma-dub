@@ -24,7 +24,7 @@ source "$SELF_DIR/lib/env.sh"
 SOURCE_LANG="auto"
 TARGET_LANG="en"
 VOICE="charlie"
-TTS="elevenlabs"
+TTS="kyma"
 TRANSLATE_MODEL="best"
 MAX_SPEED="1.5"
 CHUNK_SEC="22"
@@ -44,7 +44,8 @@ Options:
   --to <lang>              target language code (default: en)
   --voice <name|id>        voice: charlie|will|liam|brian|rachel|adam|jessica
                            or a raw ElevenLabs voice id (default: charlie)
-  --tts <engine>           elevenlabs (default, best quality v3) | kyma
+  --tts <engine>           kyma (default — everything on one Kyma key,
+                           eleven-v3 quality) | elevenlabs (direct v3)
   --model <id>             translation model via Kyma (default: best)
   --max-speed <n>          max voice speed-up to fit a slot (default: 1.5).
                            The voice is never slowed below 1.0 — leftover

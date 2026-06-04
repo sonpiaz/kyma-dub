@@ -75,13 +75,15 @@ The trick that keeps it in sync: it never translates-then-reads one long block (
 
 Two gates dogfood Kyma; the voice uses ElevenLabs directly for v3 quality.
 
+By default the **whole pipeline runs on one Kyma key** (transcribe + translate + voice):
+
 | Step | Default route | Notes |
 |---|---|---|
 | Transcribe | Kyma `whisper-v3-turbo` (or Groq direct) | timestamps |
 | Translate | Kyma `best` | fitted to timing |
-| TTS | ElevenLabs `eleven_v3` (direct) | best, expressive |
+| TTS | Kyma `eleven-v3` | best, expressive — one key |
 
-`--tts kyma` routes TTS through Kyma's `eleven-v3` too — full **one-key** dubbing (transcribe + translate + voice all on a single Kyma key), same v3 quality.
+Pass `--tts elevenlabs` to send TTS straight to ElevenLabs `eleven_v3` (one less hop; needs `ELEVENLABS_API_KEY`). Either way the audio is the same v3 voice.
 
 The TTS engine is **locked once at job start** so the voice never changes mid-video. The fallback chain (each tried in order on a synth probe):
 
