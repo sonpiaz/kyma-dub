@@ -17,6 +17,7 @@ INSTALL_DIR="${KYMA_DUB_HOME:-$HOME/.kyma-dub}"
 BIN_LINK_DIR="${KYMA_DUB_BIN:-$HOME/.local/bin}"
 CLAUDE_SKILLS_DIR="${HOME}/.claude/skills"
 WITH_SKILL=0
+WITH_MCP=0
 
 red() { printf "\033[31m%s\033[0m\n" "$*"; }
 green() { printf "\033[32m%s\033[0m\n" "$*"; }
@@ -29,10 +30,12 @@ kyma-dub installer
 
 Usage:
   curl -fsSL https://github.com/sonpiaz/kyma-dub/releases/latest/download/install.sh | bash
-  ./install.sh [--with-skill]
+  ./install.sh [--with-skill] [--with-mcp]
 
 Flags:
   --with-skill   Copy SKILL.md into ~/.claude/skills/kyma-dub/.
+  --with-mcp     Print the MCP-server config snippet for Claude/Cursor/GPT
+                 desktop (uses npx @sonpiaz/kyma-dub-mcp).
   -h, --help     Show this help and exit.
 EOF
 }
@@ -40,6 +43,7 @@ EOF
 while (($# > 0)); do
   case "$1" in
     --with-skill) WITH_SKILL=1; shift ;;
+    --with-mcp) WITH_MCP=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) red "Unknown flag: $1"; echo; usage; exit 64 ;;
   esac
@@ -92,6 +96,28 @@ if ((WITH_SKILL)); then
   else
     yellow "⚠ --with-skill: SKILL.md not found; skipped."
   fi
+fi
+
+# ── optional MCP config hint ──
+if ((WITH_MCP)); then
+  echo
+  printf "\033[36m%s\033[0m\n" "MCP server for Claude/Cursor/GPT desktop — add to your client config:"
+  # Desktop apps spawn with a minimal PATH, so pin the CLI path via KYMA_DUB_BIN.
+  cat <<EOF
+  {
+    "mcpServers": {
+      "kyma-dub": {
+        "command": "npx",
+        "args": ["-y", "@sonpiaz/kyma-dub-mcp"],
+        "env": {
+          "KYMA_API_KEY": "kyma-xxxxxxxx",
+          "KYMA_DUB_BIN": "$BIN_LINK_DIR/kyma-dub"
+        }
+      }
+    }
+  }
+EOF
+  dim "  KYMA_DUB_BIN is set so the desktop app finds the CLI even with a minimal PATH."
 fi
 
 # ── env scaffold ──

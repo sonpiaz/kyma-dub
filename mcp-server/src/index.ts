@@ -27,7 +27,7 @@ import {
 } from "./dub-tools.js";
 
 const SERVER_NAME = "kyma-dub-mcp";
-const SERVER_VERSION = "0.1.0";
+const SERVER_VERSION = "0.1.1";
 
 const TOOLS = [
   {

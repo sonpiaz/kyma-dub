@@ -1,5 +1,7 @@
 # kyma-dub
 
+[![npm: @sonpiaz/kyma-dub-mcp](https://img.shields.io/npm/v/@sonpiaz/kyma-dub-mcp?label=mcp%20server&color=cb3837&logo=npm)](https://www.npmjs.com/package/@sonpiaz/kyma-dub-mcp) [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Dub any video into another language with a natural, **time-aligned** AI voiceover — from the terminal, all on one [Kyma](https://kymaapi.com) key.
 
 ```bash
@@ -107,7 +109,24 @@ The TTS engine is **locked once at job start** so the voice never changes mid-vi
 
 ## Desktop (MCP)
 
-Use kyma-dub from Claude desktop, Cursor, or ChatGPT desktop via the bundled MCP server in [`mcp-server/`](mcp-server/) — it exposes dubbing (job-based) plus live `list_models` / `list_voices` / `recommend_voice` / `preview_voice` / `whatsnew` tools and `kyma-dub://models` + `kyma-dub://voices` resources. See [mcp-server/README.md](mcp-server/README.md).
+Use kyma-dub from Claude desktop, Cursor, or ChatGPT desktop via the published MCP server [`@sonpiaz/kyma-dub-mcp`](https://www.npmjs.com/package/@sonpiaz/kyma-dub-mcp) — it exposes dubbing (job-based) plus live `list_models` / `list_voices` / `recommend_voice` / `preview_voice` / `whatsnew` tools and `kyma-dub://models` + `kyma-dub://voices` resources.
+
+```json
+{
+  "mcpServers": {
+    "kyma-dub": {
+      "command": "npx",
+      "args": ["-y", "@sonpiaz/kyma-dub-mcp"],
+      "env": {
+        "KYMA_API_KEY": "kyma-xxxxxxxx",
+        "KYMA_DUB_BIN": "/Users/you/.local/bin/kyma-dub"
+      }
+    }
+  }
+}
+```
+
+> **Note:** the MCP server shells out to the `kyma-dub` CLI, so install the CLI first (above). Desktop apps spawn with a minimal `PATH`, so set **`KYMA_DUB_BIN`** to the absolute CLI path (run `which kyma-dub`) — otherwise the server can't find it. See [mcp-server/README.md](mcp-server/README.md).
 
 ## Notes & limits
 

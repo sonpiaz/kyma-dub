@@ -30,11 +30,16 @@ npm run build
     "kyma-dub": {
       "command": "npx",
       "args": ["-y", "@sonpiaz/kyma-dub-mcp"],
-      "env": { "KYMA_API_KEY": "kyma-xxxxxxxx" }
+      "env": {
+        "KYMA_API_KEY": "kyma-xxxxxxxx",
+        "KYMA_DUB_BIN": "/Users/you/.local/bin/kyma-dub"
+      }
     }
   }
 }
 ```
+
+> **Set `KYMA_DUB_BIN`** to the absolute path of the `kyma-dub` CLI (run `which kyma-dub`). Desktop apps spawn the server with a minimal `PATH` that usually omits `~/.local/bin`, so without this the server reports `tag=missing-dep:kyma-dub`.
 
 Published on npm: [`@sonpiaz/kyma-dub-mcp`](https://www.npmjs.com/package/@sonpiaz/kyma-dub-mcp). (For local dev, point `command` to `node` + `dist/index.js` instead.)
 
