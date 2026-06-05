@@ -73,6 +73,8 @@ kyma-dub talk.mp4 --srt           # dubbed.mp4 + dubbed.srt (synced to the dub)
 kyma-dub talk.mp4 --burn          # captions burned in (great for TikTok/Reels)
 ```
 
+`--burn` is optional and the only thing that needs **libass** in your ffmpeg (most Linux and static ffmpeg builds have it; current Homebrew ffmpeg does not). If libass is missing, `--burn` automatically falls back to writing the synced `.srt` so nothing breaks — load it as a soft subtitle or burn it in your editor.
+
 ## Discover (the live "door")
 
 Models and voices on Kyma evolve. These query the **live** catalog so you (or an agent) always recommend what's current and matched to the audience:

@@ -422,11 +422,13 @@ def main():
                     out_srt = os.path.splitext(cfg["out"])[0] + ".srt"
                     write_srt(cues, out_srt)
                     mux(video, track, cfg["out"])
-                    log("⚠ this ffmpeg has no subtitle renderer (built without libass), "
-                        "so subtitles could not be burned in.")
-                    log(f"  Wrote the dubbed video + {out_srt} instead.")
-                    log("  To enable --burn: install a libass-enabled ffmpeg "
-                        "(e.g. `brew reinstall ffmpeg`), or import the .srt in CapCut.")
+                    log("note: this ffmpeg was built without libass, so captions can't be "
+                        "burned in — wrote the dubbed video + a synced .srt instead:")
+                    log(f"  {out_srt}")
+                    log("  Use it as a soft subtitle, or import it in an editor (CapCut, "
+                        "Premiere) to burn with full styling.")
+                    log("  For in-tool --burn, use an ffmpeg with libass (most Linux/static "
+                        "builds have it; on macOS use a static build or the homebrew-ffmpeg tap).")
             else:
                 mux(video, track, cfg["out"])
         else:
