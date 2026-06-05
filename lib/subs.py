@@ -15,8 +15,13 @@ LANG_NAMES = {"en": "English", "vi": "Vietnamese", "es": "Spanish", "fr": "Frenc
               "de": "German", "ja": "Japanese", "ko": "Korean", "zh": "Chinese",
               "pt": "Portuguese", "it": "Italian", "hi": "Hindi", "id": "Indonesian"}
 
-MAX_CUE_SEC = 6.0      # don't let a cue linger too long
-MERGE_UNDER_SEC = 1.4  # fold tiny segments into the previous cue
+# Cue grouping: merge Whisper fragments into whole sentence-ish cues so each
+# subtitle line reads on its own (no "…" continuation between fragments).
+SENT_END = (".", "?", "!", "…", "。", "？", "！")
+MAX_CUE_SEC = 6.5      # split a cue once it would run longer than this
+MAX_CUE_CHARS = 90     # …or longer than this many source chars
+MIN_CUE_SEC = 1.2      # don't emit ultra-short cues
+GAP_BREAK = 0.45       # a pause this long (with enough cue already) ends a cue
 
 
 def log(m): print(f"[kyma-dub] {m}", file=sys.stderr, flush=True)
@@ -51,17 +56,27 @@ def transcribe(cfg, audio):
 
 
 def build_cues(segments):
-    cues = []
+    cues, cur = [], None
     for s in segments:
         st, en, tx = float(s["start"]), float(s["end"]), s["text"].strip()
         if not tx:
             continue
-        if cues and (cues[-1]["end"] - cues[-1]["start"] < MERGE_UNDER_SEC) \
-                and (en - cues[-1]["start"]) <= MAX_CUE_SEC:
-            cues[-1]["end"] = en
-            cues[-1]["src"] += " " + tx
+        if cur is None:
+            cur = {"start": st, "end": en, "src": tx}
+            continue
+        dur = cur["end"] - cur["start"]
+        gap = st - cur["end"]
+        ends_sentence = cur["src"].rstrip().endswith(SENT_END)
+        too_long = (en - cur["start"]) > MAX_CUE_SEC or len(cur["src"]) > MAX_CUE_CHARS
+        big_pause = gap >= GAP_BREAK and dur >= MIN_CUE_SEC
+        if (ends_sentence and dur >= MIN_CUE_SEC) or too_long or big_pause:
+            cues.append(cur)
+            cur = {"start": st, "end": en, "src": tx}
         else:
-            cues.append({"start": st, "end": en, "src": tx})
+            cur["end"] = en
+            cur["src"] = (cur["src"].rstrip() + " " + tx).strip()
+    if cur:
+        cues.append(cur)
     for i, c in enumerate(cues):
         c["i"] = i
     return cues
@@ -71,7 +86,7 @@ BATCH = 40  # cues per LLM call — keep responses small so they don't time out
 
 def _translate_batch(cfg, batch, sysp):
     brief = [{"i": c["i"], "text": c["src"]} for c in batch]
-    body = json.dumps({"model": cfg["translate_model"], "temperature": 0.3,
+    body = json.dumps({"model": cfg["translate_model"], "temperature": 0.2,
                        "response_format": {"type": "json_object"},
                        "messages": [{"role": "system", "content": sysp},
                                     {"role": "user", "content": "Cues:\n\n" + json.dumps(brief, ensure_ascii=False)}]}).encode()
@@ -97,10 +112,15 @@ def translate(cfg, cues):
         f"{tgt} that preserves the meaning and tone.\n"
         "FAITHFULNESS (most important): translate ONLY what the cue says. NEVER add, "
         "invent, infer, or embellish any fact, name, place, brand, number, or institution "
-        "not explicitly in the source (e.g. never turn a generic 'university' into "
-        "'Stanford'). If a word is unclear, translate it plainly or keep it generic.\n"
+        "not explicitly in the source. The transcript may be garbled by speech-recognition "
+        "errors — when a word is unclear, mistranscribed, or generic, render it with a "
+        "GENERIC term (e.g. 'abroad', 'over there', 'a school') or omit it. NEVER substitute "
+        "a specific proper noun (city, university, company, person) for an unclear or "
+        "generic word — do not guess 'Stanford' or 'San Francisco' from ambiguous audio.\n"
         "Keep names, numbers, and technical terms exactly. Do NOT merge or split cues — "
         "return exactly one line per input cue, same order.\n"
+        "Each line is a clean standalone subtitle: do NOT add leading/trailing ellipses "
+        "('...' or '…'), dashes, or any continuation marker — just the translated text.\n"
         'OUTPUT: JSON {"cues":[{"i":<index>,"text":"<subtitle>"}, ...]}. ONLY JSON.')
     tr, model = {}, cfg["translate_model"]
     n = len(cues)

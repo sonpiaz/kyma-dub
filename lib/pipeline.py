@@ -145,11 +145,12 @@ def translate(cfg, chunks):
         f"(auto-transcribed) into {tgt} for spoken voice-over, chunk by chunk.\n"
         "FAITHFULNESS — THE MOST IMPORTANT RULE: translate ONLY what the source says. "
         "NEVER add, invent, infer, embellish, or 'improve' any fact, name, place, brand, "
-        "number, institution, title, or claim that is not explicitly in the source. If a "
-        "word is unclear or garbled, translate it plainly or keep it generic — do NOT "
-        "replace it with a specific guess (e.g. never turn a generic 'university'/'school' "
-        "into a named one like 'Stanford'; never invent a company, product, or statistic). "
-        "Accuracy is more important than fluency. When unsure, stay literal and generic.\n"
+        "number, institution, title, or claim that is not explicitly in the source. The "
+        "transcript may be garbled by speech-recognition errors — when a word is unclear, "
+        "mistranscribed, or generic, render it with a GENERIC term (e.g. 'abroad', 'over "
+        "there', 'a school') or omit it. NEVER substitute a specific proper noun (city, "
+        "university, company, person) for an unclear or generic word — do not guess "
+        "'Stanford' or 'San Francisco' from ambiguous audio. Accuracy over fluency.\n"
         "PACING: the speaker talks continuously, so each chunk should fill close to its "
         "max_seconds when spoken at a natural pace — translate the FULL meaning, do NOT "
         "compress, summarize, or shorten to leave silence. Only trim if the text would "
@@ -159,7 +160,7 @@ def translate(cfg, chunks):
         "terms exactly as in the source. Preserve any ordering/numbering.\n"
         'OUTPUT: JSON {"chunks":[{"i":<index>,"text":"<translated>"}, ...]} in the same '
         "order, one per input chunk. Output ONLY the JSON.")
-    body = {"model": cfg["translate_model"], "temperature": 0.3,
+    body = {"model": cfg["translate_model"], "temperature": 0.2,
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": sysp},
                          {"role": "user", "content": "Chunks:\n\n" + json.dumps(brief, ensure_ascii=False)}]}
