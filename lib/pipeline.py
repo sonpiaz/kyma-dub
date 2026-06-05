@@ -20,7 +20,7 @@ Routing (see lib/env.sh):
   Layers 1-3 share the ElevenLabs upstream; only layer 4 is a truly
   independent provider, so it only runs with allow_voice_fallback=true.
 """
-import sys, os, json, subprocess, tempfile, shutil, urllib.request, urllib.error
+import sys, os, json, re, subprocess, tempfile, shutil, urllib.request, urllib.error
 
 # friendly voice name -> ElevenLabs voice id
 VOICES = {
@@ -287,6 +287,7 @@ def assemble(chunks, total_dur, workdir):
     parts, prev_end, overrun = [], 0.0, 0.0
     for c in chunks:
         pos = max(c["start"], prev_end)
+        c["pos"] = pos   # actual placed start, for dub-synced subtitles
         gap = pos - prev_end
         if gap > 0.02:
             parts.append(_silence(workdir, c["i"], gap))
@@ -308,10 +309,77 @@ def assemble(chunks, total_dur, workdir):
     return track
 
 
-# ── 8. mux ──────────────────────────────────────────────────────────
+# ── 8. subtitles (timed to the DUB, so they match the new audio) ────
+def _split_lines(text, max_chars=84):
+    text = text.strip()
+    out = []
+    for s in re.split(r"(?<=[.!?…])\s+", text):
+        s = s.strip()
+        if not s:
+            continue
+        if len(s) <= max_chars:
+            out.append(s)
+        else:  # split a long sentence at word boundaries
+            cur = ""
+            for w in s.split():
+                if cur and len(cur) + 1 + len(w) > max_chars:
+                    out.append(cur); cur = w
+                else:
+                    cur = (cur + " " + w).strip()
+            if cur:
+                out.append(cur)
+    return out or [text]
+
+def build_dub_subcues(chunks):
+    """Split each chunk's translated text into subtitle lines, timed across
+    the chunk's PLACED window [pos, pos+spoken] — so subs match the dub."""
+    cues = []
+    for c in chunks:
+        pos = c.get("pos", c["start"]); dur = max(0.3, c.get("spoken", c["dur"]))
+        parts = _split_lines(c["en"])
+        total = sum(len(p) for p in parts) or 1
+        t = pos
+        for p in parts:
+            d = dur * len(p) / total
+            cues.append({"start": t, "end": t + d, "text": p})
+            t += d
+    return cues
+
+def _srt_ts(t):
+    h = int(t // 3600); m = int(t % 3600 // 60); s = int(t % 60); ms = int(round((t - int(t)) * 1000))
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+def write_srt(cues, path):
+    with open(path, "w") as f:
+        for n, c in enumerate(cues, 1):
+            f.write(f"{n}\n{_srt_ts(c['start'])} --> {_srt_ts(c['end'])}\n{c['text']}\n\n")
+
+
+# ── 9. mux / burn ───────────────────────────────────────────────────
 def mux(video, track, out):
     ff(["-i", video, "-i", track, "-map", "0:v:0", "-map", "1:a:0",
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", out])
+
+def _has_subtitles_filter():
+    try:
+        out = subprocess.check_output(["ffmpeg", "-hide_banner", "-filters"],
+                                      stderr=subprocess.DEVNULL).decode()
+        return bool(re.search(r"^\s*\S*\s+subtitles\b", out, re.M))
+    except Exception:
+        return False
+
+def burn(video, track, srt_path, out):
+    # Re-encode the video with subtitles burned in (needs libass). Returns
+    # False if this ffmpeg can't render text, so the caller can fall back.
+    if not _has_subtitles_filter():
+        return False
+    style = ("FontName=Arial,FontSize=18,PrimaryColour=&H00FFFFFF,"
+             "OutlineColour=&H00000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=40,Alignment=2")
+    ff(["-i", video, "-i", track, "-map", "0:v:0", "-map", "1:a:0",
+        "-vf", f"subtitles={srt_path}:force_style='{style}'",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-c:a", "aac", "-b:a", "192k", out])
+    return True
 
 
 def main():
@@ -342,7 +410,27 @@ def main():
             tag = f"speed={speed:.2f}" if speed > 1.0 else f"+{c['dur'] - spoken:.1f}s pause"
             log(f"  chunk {c['i']:>2} slot={c['dur']:>5.1f}s spoken={spoken:>5.1f}s {tag}")
         track = assemble(chunks, total_dur, workdir)
-        mux(video, track, cfg["out"])
+        if cfg.get("burn") or cfg.get("srt"):
+            cues = build_dub_subcues(chunks)
+            if cfg.get("srt"):
+                out_srt = os.path.splitext(cfg["out"])[0] + ".srt"
+                write_srt(cues, out_srt); log(f"subtitles -> {out_srt}")
+            if cfg.get("burn"):
+                wsrt = os.path.join(workdir, "subs.srt"); write_srt(cues, wsrt)
+                log("burning subtitles into video (re-encoding)…")
+                if not burn(video, track, wsrt, cfg["out"]):
+                    out_srt = os.path.splitext(cfg["out"])[0] + ".srt"
+                    write_srt(cues, out_srt)
+                    mux(video, track, cfg["out"])
+                    log("⚠ this ffmpeg has no subtitle renderer (built without libass), "
+                        "so subtitles could not be burned in.")
+                    log(f"  Wrote the dubbed video + {out_srt} instead.")
+                    log("  To enable --burn: install a libass-enabled ffmpeg "
+                        "(e.g. `brew reinstall ffmpeg`), or import the .srt in CapCut.")
+            else:
+                mux(video, track, cfg["out"])
+        else:
+            mux(video, track, cfg["out"])
         log(f"done -> {cfg['out']}")
         print(cfg["out"])
     finally:

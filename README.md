@@ -46,6 +46,10 @@ kyma-dub <video> [options]
   --chunk-sec <n>          max seconds per dub chunk (default: 22)
   --allow-voice-fallback   permit an independent MiniMax voice if every
                            ElevenLabs path is down (CHANGES the voice)
+  --srt                    also write a .srt timed to the dubbed audio
+  --burn                   burn the subtitles into the output video
+                           (needs a libass-enabled ffmpeg; falls back to
+                           writing the .srt if unavailable)
   --out <path>             output file
   --keep-temp              keep intermediate files
   --version / -h
@@ -60,7 +64,14 @@ kyma-dub subs video.mov --to en --format both   # writes video.en.srt + video.en
 kyma-dub subs talk.mp4 --to es                  # Spanish .srt
 ```
 
-Translation is **faithful by design** — it never invents facts, names, places, or numbers that aren't in the source.
+Translation is **faithful by design** — it never invents facts, names, places, or numbers that aren't in the source (when the audio is unclear it stays generic instead of guessing).
+
+To put captions **on the dubbed video** (timed to the new English audio, not the original), dub with `--srt` (separate file) or `--burn` (rendered into the video — needs a libass-enabled ffmpeg):
+
+```bash
+kyma-dub talk.mp4 --srt           # dubbed.mp4 + dubbed.srt (synced to the dub)
+kyma-dub talk.mp4 --burn          # captions burned in (great for TikTok/Reels)
+```
 
 ## Discover (the live "door")
 

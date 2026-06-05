@@ -87,6 +87,8 @@ CHUNK_SEC="22"
 OUT=""
 KEEP_TEMP=0
 ALLOW_VOICE_FALLBACK=0
+BURN=0
+SRT=0
 
 usage() {
   cat <<'EOF'
@@ -137,6 +139,8 @@ while (($# > 0)); do
     --max-speed) MAX_SPEED="$2"; shift 2 ;;
     --chunk-sec) CHUNK_SEC="$2"; shift 2 ;;
     --allow-voice-fallback) ALLOW_VOICE_FALLBACK=1; shift ;;
+    --burn) BURN=1; shift ;;
+    --srt) SRT=1; shift ;;
     --out) OUT="$2"; shift 2 ;;
     --keep-temp) KEEP_TEMP=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -204,6 +208,8 @@ json.dump({
  "max_speed": float("$MAX_SPEED"),
  "chunk_sec": float("$CHUNK_SEC"),
  "allow_voice_fallback": bool($ALLOW_VOICE_FALLBACK),
+ "burn": bool($BURN),
+ "srt": bool($SRT),
  "keep_temp": bool($KEEP_TEMP),
 }, open(sys.argv[1],"w"))
 PY
