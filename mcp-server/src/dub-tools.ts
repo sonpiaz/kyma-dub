@@ -120,7 +120,7 @@ const jobs = new Map<string, Job>();
 export interface DubArgs {
   video_path: string; source_lang?: string; target_lang?: string; voice?: string;
   model?: string; tts?: string; max_speed?: number; chunk_sec?: number;
-  allow_voice_fallback?: boolean; out?: string;
+  allow_voice_fallback?: boolean; srt?: boolean; bilingual?: boolean; burn?: boolean; out?: string;
 }
 
 export async function dubStart(a: DubArgs) {
@@ -134,6 +134,9 @@ export async function dubStart(a: DubArgs) {
   if (a.max_speed != null) args.push("--max-speed", String(a.max_speed));
   if (a.chunk_sec != null) args.push("--chunk-sec", String(a.chunk_sec));
   if (a.allow_voice_fallback) args.push("--allow-voice-fallback");
+  if (a.srt) args.push("--srt");
+  if (a.bilingual) args.push("--bilingual");
+  if (a.burn) args.push("--burn");
   if (a.out) args.push("--out", a.out);
 
   const id = randomUUID().slice(0, 8);

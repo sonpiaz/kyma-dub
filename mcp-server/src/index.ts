@@ -27,7 +27,7 @@ import {
 } from "./dub-tools.js";
 
 const SERVER_NAME = "kyma-dub-mcp";
-const SERVER_VERSION = "0.1.1";
+const SERVER_VERSION = "0.2.0";
 
 const TOOLS = [
   {
@@ -46,6 +46,9 @@ const TOOLS = [
         max_speed: { type: "number", description: "Max voice speed-up to fit a slot (default 1.5). Never slows below 1.0." },
         chunk_sec: { type: "number", description: "Max seconds per dub chunk (default 22)." },
         allow_voice_fallback: { type: "boolean", description: "Permit an independent MiniMax voice if every ElevenLabs path is down (changes the voice)." },
+        srt: { type: "boolean", description: "Also write a .srt timed to the dubbed audio." },
+        bilingual: { type: "boolean", description: "Bilingual captions: target language on top, cleaned source smaller + dimmer below. Pair with burn." },
+        burn: { type: "boolean", description: "Burn captions into the output video (needs a libass ffmpeg; otherwise writes the subtitle file)." },
         out: { type: "string", description: "Output file path. Defaults to '<name> [<LANG> dub].mp4' next to the source." },
       },
       required: ["video_path"],

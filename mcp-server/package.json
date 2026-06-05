@@ -1,6 +1,6 @@
 {
   "name": "@sonpiaz/kyma-dub-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "mcpName": "io.github.sonpiaz/kyma-dub",
   "description": "Dub a video into another language with a natural, time-aligned AI voiceover — plus live model/voice discovery. MCP stdio server for kyma-dub.",
   "type": "module",

@@ -27,13 +27,33 @@ case "${1:-}" in
   models|voices|preview|recommend|whatsnew)
     exec python3 "$SELF_DIR/lib/discover.py" "$@"
     ;;
+  setup-ffmpeg)
+    # Download a libass-enabled static ffmpeg (for --burn) without touching system ffmpeg.
+    DEST="$HOME/.kyma-dub/bin"; mkdir -p "$DEST"
+    if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+      echo "[kyma-dub] downloading libass-enabled ffmpeg (macOS arm64)…"
+      if curl -fsSL --max-time 120 "https://www.osxexperts.net/ffmpeg71arm.zip" -o /tmp/kdff.zip; then
+        unzip -o -q /tmp/kdff.zip -d "$DEST" && chmod +x "$DEST/ffmpeg" && xattr -d com.apple.quarantine "$DEST/ffmpeg" 2>/dev/null
+        rm -rf "$DEST/__MACOSX" /tmp/kdff.zip
+        "$DEST/ffmpeg" -hide_banner -filters 2>/dev/null | grep -q ' ass ' \
+          && echo "[kyma-dub] ✓ installed $DEST/ffmpeg (has libass) — --burn ready" \
+          || echo "[kyma-dub] ⚠ downloaded but libass not detected"
+      else
+        echo "[kyma-dub] download failed. Get a libass ffmpeg manually and set KYMA_DUB_FFMPEG." >&2; exit 1
+      fi
+    else
+      echo "[kyma-dub] auto-setup is macOS/arm64 only. On Linux, system ffmpeg usually has libass"
+      echo "  (apt install ffmpeg). Otherwise point KYMA_DUB_FFMPEG to a libass-enabled ffmpeg."
+    fi
+    exit 0
+    ;;
   --version) echo "$KYMA_DUB_VERSION_STRING"; exit 0 ;;
 esac
 
 # ── subs subcommand: translated subtitles (.srt/.vtt) ──
 if [[ "${1:-}" == "subs" ]]; then
   shift
-  S_FROM="auto"; S_TO="en"; S_MODEL="qwen-3.7-max"; S_OUT=""; S_FMT="srt"; S_VIDEO=""
+  S_FROM="auto"; S_TO="en"; S_MODEL="qwen-3.7-max"; S_OUT=""; S_FMT="srt"; S_VIDEO=""; S_BILINGUAL=0; S_BURN=0
   while (($# > 0)); do
     case "$1" in
       --from) S_FROM="$2"; shift 2 ;;
@@ -41,7 +61,9 @@ if [[ "${1:-}" == "subs" ]]; then
       --model) S_MODEL="$2"; shift 2 ;;
       --out) S_OUT="$2"; shift 2 ;;
       --format) S_FMT="$2"; shift 2 ;;
-      -h|--help) echo "Usage: kyma-dub subs <video> [--from <lang>] [--to <lang>] [--model <id>] [--format srt|vtt|both] [--out <path-without-ext>]"; exit 0 ;;
+      --bilingual) S_BILINGUAL=1; shift ;;
+      --burn) S_BURN=1; shift ;;
+      -h|--help) echo "Usage: kyma-dub subs <video> [--from <lang>] [--to <lang>] [--bilingual] [--burn] [--format srt|vtt|both] [--out <path-without-ext>]"; exit 0 ;;
       -*) echo "[kyma-dub] unknown flag: $1" >&2; exit 64 ;;
       *) S_VIDEO="$1"; shift ;;
     esac
@@ -70,6 +92,8 @@ json.dump({
  "target_lang": "$S_TO",
  "translate_model": "$S_MODEL",
  "format": "$S_FMT",
+ "bilingual": bool($S_BILINGUAL),
+ "burn": bool($S_BURN),
 }, open(sys.argv[1],"w"))
 PY
   python3 "$SELF_DIR/lib/subs.py" "$CFG"
@@ -89,6 +113,7 @@ KEEP_TEMP=0
 ALLOW_VOICE_FALLBACK=0
 BURN=0
 SRT=0
+BILINGUAL=0
 
 usage() {
   cat <<'EOF'
@@ -110,6 +135,11 @@ Dub options:
   --chunk-sec <n>          max seconds per dub chunk (default: 22).
   --allow-voice-fallback   permit an independent MiniMax voice if every
                            ElevenLabs path is down (CHANGES the voice)
+  --srt                    also write a .srt timed to the dubbed audio
+  --bilingual              add bilingual captions: target on top, cleaned
+                           source smaller + dimmer below (pair with --burn)
+  --burn                   burn the captions into the output video
+                           (needs libass ffmpeg — run `kyma-dub setup-ffmpeg`)
   --out <path>             output file (default: "<name> [<LANG> dub].mp4")
   --keep-temp              keep intermediate files
   --version / -h
@@ -141,6 +171,7 @@ while (($# > 0)); do
     --allow-voice-fallback) ALLOW_VOICE_FALLBACK=1; shift ;;
     --burn) BURN=1; shift ;;
     --srt) SRT=1; shift ;;
+    --bilingual) BILINGUAL=1; shift ;;
     --out) OUT="$2"; shift 2 ;;
     --keep-temp) KEEP_TEMP=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -210,6 +241,7 @@ json.dump({
  "allow_voice_fallback": bool($ALLOW_VOICE_FALLBACK),
  "burn": bool($BURN),
  "srt": bool($SRT),
+ "bilingual": bool($BILINGUAL),
  "keep_temp": bool($KEEP_TEMP),
 }, open(sys.argv[1],"w"))
 PY

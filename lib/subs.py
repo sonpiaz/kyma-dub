@@ -10,6 +10,7 @@ isochrony needed). Runs on one Kyma key.
 Invoked by bin/kyma-dub:  python3 subs.py <config.json>
 """
 import sys, os, json, subprocess, tempfile, shutil, urllib.request, urllib.error
+import bilingual as bl
 
 LANG_NAMES = {"en": "English", "vi": "Vietnamese", "es": "Spanish", "fr": "French",
               "de": "German", "ja": "Japanese", "ko": "Korean", "zh": "Chinese",
@@ -163,6 +164,23 @@ def main():
         segs, lang = transcribe(cfg, audio)
         if cfg.get("source_lang", "auto") == "auto":
             cfg["source_lang"] = lang
+        if cfg.get("bilingual"):
+            bcues = bl.bilingual_cues(cfg, segs)
+            W, H = bl.video_dims(cfg["video"])
+            if cfg.get("burn"):
+                ass = os.path.join(workdir, "bilingual.ass"); bl.write_ass(bcues, ass, W, H)
+                ff = bl.resolve_libass_ffmpeg()
+                if ff:
+                    out_mp4 = cfg["out_base"] + ".mp4"
+                    log("burning bilingual subtitles into the video (re-encoding)…")
+                    bl.burn_ass(ff, cfg["video"], ass, out_mp4)
+                    log(f"done -> {out_mp4}"); print(out_mp4); return
+                out_ass = cfg["out_base"] + ".ass"; bl.write_ass(bcues, out_ass, W, H)
+                log("note: no libass ffmpeg found — wrote the bilingual subtitles instead:")
+                log(f"  {out_ass}")
+                log("  Run `kyma-dub setup-ffmpeg` to enable burning."); print(out_ass); return
+            out_ass = cfg["out_base"] + ".ass"; bl.write_ass(bcues, out_ass, W, H)
+            log(f"done -> {out_ass}"); print(out_ass); return
         cues = build_cues(segs)
         log(f"{len(segs)} segments -> {len(cues)} cues (source language={cfg['source_lang']})")
         cues = translate(cfg, cues)

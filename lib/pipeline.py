@@ -21,6 +21,7 @@ Routing (see lib/env.sh):
   independent provider, so it only runs with allow_voice_fallback=true.
 """
 import sys, os, json, re, subprocess, tempfile, shutil, urllib.request, urllib.error
+import bilingual as bl
 
 # friendly voice name -> ElevenLabs voice id
 VOICES = {
@@ -410,7 +411,26 @@ def main():
             tag = f"speed={speed:.2f}" if speed > 1.0 else f"+{c['dur'] - spoken:.1f}s pause"
             log(f"  chunk {c['i']:>2} slot={c['dur']:>5.1f}s spoken={spoken:>5.1f}s {tag}")
         track = assemble(chunks, total_dur, workdir)
-        if cfg.get("burn") or cfg.get("srt"):
+        if cfg.get("bilingual"):
+            bcues = bl.bilingual_cues(cfg, segs)
+            W, H = bl.video_dims(video)
+            ass = os.path.join(workdir, "bilingual.ass")
+            bl.write_ass(bcues, ass, W, H)
+            ff = bl.resolve_libass_ffmpeg()
+            if cfg.get("burn") and ff:
+                log("burning bilingual subtitles into the dubbed video (re-encoding)…")
+                bl.burn_ass(ff, video, ass, cfg["out"], audio_track=track)
+            else:
+                out_ass = os.path.splitext(cfg["out"])[0] + ".ass"
+                bl.write_ass(bcues, out_ass, W, H)
+                mux(video, track, cfg["out"])
+                if cfg.get("burn"):
+                    log("note: no libass ffmpeg found — wrote the dubbed video + bilingual subtitles:")
+                    log(f"  {out_ass}")
+                    log("  Run `kyma-dub setup-ffmpeg` to enable burning, or load the .ass in a player.")
+                else:
+                    log(f"bilingual subtitles -> {out_ass}")
+        elif cfg.get("burn") or cfg.get("srt"):
             cues = build_dub_subcues(chunks)
             if cfg.get("srt"):
                 out_srt = os.path.splitext(cfg["out"])[0] + ".srt"

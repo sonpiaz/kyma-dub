@@ -49,10 +49,13 @@ Built-in voice aliases: charlie (default), will, liam, brian, rachel, adam,
 jessica — or any voice id from `kyma-dub voices`.
 
 ## Subtitles
-Generate translated `.srt` / `.vtt` (no audio change):
+Generate translated `.srt` / `.vtt` (no audio change), or bilingual burned-in captions:
 ```bash
-kyma-dub subs <video> [--from <lang>] [--to <lang>] [--format srt|vtt|both] [--out <path-without-ext>]
+kyma-dub subs <video> [--to <lang>] [--format srt|vtt|both]      # subtitle file
+kyma-dub <video> --bilingual --burn                              # dub + burn EN-on-top / source-below captions
+kyma-dub subs <video> --bilingual --burn                        # bilingual captions on a non-dubbed video
 ```
+`--bilingual` shows the target language on top and a cleaned-up original below (smaller, dimmer). `--burn` renders captions into the video — needs a libass ffmpeg; if missing, run `kyma-dub setup-ffmpeg` (downloads a static one to `~/.kyma-dub/bin/`).
 
 ## How it works
 extract audio → transcribe with timestamps → group by speech pauses →

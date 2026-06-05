@@ -47,9 +47,10 @@ kyma-dub <video> [options]
   --allow-voice-fallback   permit an independent MiniMax voice if every
                            ElevenLabs path is down (CHANGES the voice)
   --srt                    also write a .srt timed to the dubbed audio
-  --burn                   burn the subtitles into the output video
-                           (needs a libass-enabled ffmpeg; falls back to
-                           writing the .srt if unavailable)
+  --bilingual              add bilingual captions: target on top, cleaned
+                           source smaller + dimmer below (pair with --burn)
+  --burn                   burn the captions into the output video
+                           (needs a libass ffmpeg — run `kyma-dub setup-ffmpeg`)
   --out <path>             output file
   --keep-temp              keep intermediate files
   --version / -h
@@ -69,9 +70,14 @@ Translation is **faithful by design** — it never invents facts, names, places,
 To put captions **on the dubbed video** (timed to the new English audio, not the original), dub with `--srt` (separate file) or `--burn` (rendered into the video — needs a libass-enabled ffmpeg):
 
 ```bash
-kyma-dub talk.mp4 --srt           # dubbed.mp4 + dubbed.srt (synced to the dub)
-kyma-dub talk.mp4 --burn          # captions burned in (great for TikTok/Reels)
+kyma-dub talk.mp4 --srt                 # dubbed.mp4 + dubbed.srt (synced to the dub)
+kyma-dub talk.mp4 --burn                # captions burned in (great for TikTok/Reels)
+kyma-dub talk.mp4 --bilingual --burn    # English on top, cleaned source smaller + dimmer below
 ```
+
+**Bilingual** captions show the target language on top and a cleaned-up version of the original below (smaller and dimmer), kept inside a centred band so they clear a corner webcam. The source line is tidied by AI (ASR junk removed, light punctuation) but never altered in meaning. `kyma-dub subs <video> --bilingual --burn` does the same on a non-dubbed video.
+
+Burning needs a libass-enabled ffmpeg. Homebrew's ffmpeg ships without it, so run **`kyma-dub setup-ffmpeg`** once (downloads a static libass ffmpeg into `~/.kyma-dub/bin/`, never touching your system ffmpeg). Without it, `--burn` falls back to writing the subtitle file.
 
 `--burn` is optional and the only thing that needs **libass** in your ffmpeg (most Linux and static ffmpeg builds have it; current Homebrew ffmpeg does not). If libass is missing, `--burn` automatically falls back to writing the synced `.srt` so nothing breaks — load it as a soft subtitle or burn it in your editor.
 
