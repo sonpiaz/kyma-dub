@@ -51,6 +51,17 @@ kyma-dub <video> [options]
   --version / -h
 ```
 
+## Subtitles
+
+Generate translated subtitles (`.srt` / `.vtt`) from a video — same transcribe + faithful-translate pipeline, written against the original timestamps:
+
+```bash
+kyma-dub subs video.mov --to en --format both   # writes video.en.srt + video.en.vtt
+kyma-dub subs talk.mp4 --to es                  # Spanish .srt
+```
+
+Translation is **faithful by design** — it never invents facts, names, places, or numbers that aren't in the source.
+
 ## Discover (the live "door")
 
 Models and voices on Kyma evolve. These query the **live** catalog so you (or an agent) always recommend what's current and matched to the audience:

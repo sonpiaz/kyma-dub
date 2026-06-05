@@ -48,6 +48,12 @@ kyma-dub talk.mp4 --voice <id-from-voices>
 Built-in voice aliases: charlie (default), will, liam, brian, rachel, adam,
 jessica — or any voice id from `kyma-dub voices`.
 
+## Subtitles
+Generate translated `.srt` / `.vtt` (no audio change):
+```bash
+kyma-dub subs <video> [--from <lang>] [--to <lang>] [--format srt|vtt|both] [--out <path-without-ext>]
+```
+
 ## How it works
 extract audio → transcribe with timestamps → group by speech pauses →
 translate each chunk fitted to its seconds → TTS (engine locked once per job

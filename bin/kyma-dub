@@ -30,6 +30,52 @@ case "${1:-}" in
   --version) echo "$KYMA_DUB_VERSION_STRING"; exit 0 ;;
 esac
 
+# ── subs subcommand: translated subtitles (.srt/.vtt) ──
+if [[ "${1:-}" == "subs" ]]; then
+  shift
+  S_FROM="auto"; S_TO="en"; S_MODEL="qwen-3.7-max"; S_OUT=""; S_FMT="srt"; S_VIDEO=""
+  while (($# > 0)); do
+    case "$1" in
+      --from) S_FROM="$2"; shift 2 ;;
+      --to) S_TO="$2"; shift 2 ;;
+      --model) S_MODEL="$2"; shift 2 ;;
+      --out) S_OUT="$2"; shift 2 ;;
+      --format) S_FMT="$2"; shift 2 ;;
+      -h|--help) echo "Usage: kyma-dub subs <video> [--from <lang>] [--to <lang>] [--model <id>] [--format srt|vtt|both] [--out <path-without-ext>]"; exit 0 ;;
+      -*) echo "[kyma-dub] unknown flag: $1" >&2; exit 64 ;;
+      *) S_VIDEO="$1"; shift ;;
+    esac
+  done
+  [[ -z "$S_VIDEO" ]] && { echo "[kyma-dub] usage: kyma-dub subs <video> [--to <lang>]" >&2; exit 64; }
+  [[ -f "$S_VIDEO" ]] || { echo "[kyma-dub] file not found: $S_VIDEO" >&2; exit 66; }
+  for cmd in ffmpeg ffprobe curl python3; do command -v "$cmd" >/dev/null 2>&1 || { echo "[kyma-dub] missing dependency: $cmd" >&2; exit 1; }; done
+  kyma_dub_keys_check || exit 1
+  if [[ -z "$S_OUT" ]]; then
+    dir="$(dirname "$S_VIDEO")"; base="$(basename "${S_VIDEO%.*}")"
+    S_OUT="$dir/$base.$S_TO"
+  fi
+  CFG="$(mktemp -t kyma-subs-cfg.XXXXXX.json)"
+  trap 'rm -f "$CFG"' EXIT
+  python3 - "$CFG" <<PY
+import json,sys,os
+json.dump({
+ "video": os.path.abspath("$S_VIDEO"),
+ "out_base": os.path.abspath("$S_OUT"),
+ "mode": "$KYMA_DUB_MODE",
+ "kyma_base": "$KYMA_DUB_BASE",
+ "kyma_key": os.environ.get("KYMA_API_KEY",""),
+ "groq_key": os.environ.get("GROQ_API_KEY",""),
+ "ua": "$KYMA_DUB_USER_AGENT",
+ "source_lang": "$S_FROM",
+ "target_lang": "$S_TO",
+ "translate_model": "$S_MODEL",
+ "format": "$S_FMT",
+}, open(sys.argv[1],"w"))
+PY
+  python3 "$SELF_DIR/lib/subs.py" "$CFG"
+  exit $?
+fi
+
 # ── dub defaults ──
 SOURCE_LANG="auto"
 TARGET_LANG="en"

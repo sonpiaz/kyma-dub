@@ -47,10 +47,10 @@ DEFAULT_CPS = 15  # en, vi, es, fr, pt, id, it, hi, ...
 def chars_per_sec(lang):
     return SPEECH_CPS.get((lang or "").lower().split("-")[0], DEFAULT_CPS)
 
-# Isochrony: only ever speed the voice UP to fit a slot, never slow it
-# down (slowing drags the audio and feels delayed). Leftover slot time
-# becomes a natural pause. Capped so dense lines don't go chipmunk.
-MIN_SPEED = 1.0
+# Isochrony: speed UP to fit a slot, and allow a GENTLE slow-down (down to
+# 0.9x — imperceptible) to fill small gaps so continuous speech doesn't sound
+# stop-start. Below 0.9 it drags, so the rest stays as a (now smaller) pause.
+MIN_SPEED = 0.9
 DEFAULT_MAX_SPEED = 1.5
 
 
@@ -141,23 +141,25 @@ def translate(cfg, chunks):
               "max_chars": int(round(c["dur"] * cps)),
               "source_text": c["vi"]} for c in chunks]
     sysp = (
-        f"You are an expert video-dubbing scriptwriter. Convert a {src} transcript "
-        f"(auto-transcribed, may contain ASR errors) into a natural, expressive {tgt} "
-        "voiceover, chunk by chunk. EACH chunk must be SPEAKABLE within its max_seconds "
-        "at a natural pace.\n"
-        "ISOCHRONY (critical for sync): make each translation short enough to be spoken "
-        "naturally within max_seconds. Use contraction and paraphrase for verbose "
-        "languages; stay at or under max_chars. It is far better to be slightly short "
-        "(a natural pause fills the rest) than too long. Never pad to fill time.\n"
-        "STYLE: keep first person if the source is, warm confident speaker energy, "
-        "natural spoken language with contractions, NOT a literal translation. Add "
-        "natural rhythm with commas, em-dashes, and occasional ellipses so it never "
-        "sounds robotic. Vary sentence length. Fix obvious ASR errors using context. "
-        "Preserve names, technical terms, and any explicit ordering/numbering so it "
-        "tracks the visuals.\n"
+        f"You are a professional dubbing translator. Translate a {src} transcript "
+        f"(auto-transcribed) into {tgt} for spoken voice-over, chunk by chunk.\n"
+        "FAITHFULNESS — THE MOST IMPORTANT RULE: translate ONLY what the source says. "
+        "NEVER add, invent, infer, embellish, or 'improve' any fact, name, place, brand, "
+        "number, institution, title, or claim that is not explicitly in the source. If a "
+        "word is unclear or garbled, translate it plainly or keep it generic — do NOT "
+        "replace it with a specific guess (e.g. never turn a generic 'university'/'school' "
+        "into a named one like 'Stanford'; never invent a company, product, or statistic). "
+        "Accuracy is more important than fluency. When unsure, stay literal and generic.\n"
+        "PACING: the speaker talks continuously, so each chunk should fill close to its "
+        "max_seconds when spoken at a natural pace — translate the FULL meaning, do NOT "
+        "compress, summarize, or shorten to leave silence. Only trim if the text would "
+        "clearly overflow max_seconds (then stay at or under max_chars).\n"
+        "STYLE: keep first person if the source is; natural spoken {tgt} with contractions "
+        "and natural rhythm (commas, occasional pauses). Keep names, numbers, and technical "
+        "terms exactly as in the source. Preserve any ordering/numbering.\n"
         'OUTPUT: JSON {"chunks":[{"i":<index>,"text":"<translated>"}, ...]} in the same '
         "order, one per input chunk. Output ONLY the JSON.")
-    body = {"model": cfg["translate_model"], "temperature": 0.7,
+    body = {"model": cfg["translate_model"], "temperature": 0.3,
             "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": sysp},
                          {"role": "user", "content": "Chunks:\n\n" + json.dumps(brief, ensure_ascii=False)}]}
