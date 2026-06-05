@@ -114,6 +114,7 @@ ALLOW_VOICE_FALLBACK=0
 BURN=0
 SRT=0
 BILINGUAL=0
+KEEP_ORIGINAL=0
 
 usage() {
   cat <<'EOF'
@@ -138,6 +139,8 @@ Dub options:
   --srt                    also write a .srt timed to the dubbed audio
   --bilingual              add bilingual captions: target on top, cleaned
                            source smaller + dimmer below (pair with --burn)
+  --keep-original <pct>    keep the original voice faintly under the dub
+                           (voiceover style), e.g. --keep-original 5
   --burn                   burn the captions into the output video
                            (needs libass ffmpeg — run `kyma-dub setup-ffmpeg`)
   --out <path>             output file (default: "<name> [<LANG> dub].mp4")
@@ -172,6 +175,7 @@ while (($# > 0)); do
     --burn) BURN=1; shift ;;
     --srt) SRT=1; shift ;;
     --bilingual) BILINGUAL=1; shift ;;
+    --keep-original) KEEP_ORIGINAL="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --keep-temp) KEEP_TEMP=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -242,6 +246,7 @@ json.dump({
  "burn": bool($BURN),
  "srt": bool($SRT),
  "bilingual": bool($BILINGUAL),
+ "keep_original": float("$KEEP_ORIGINAL") / 100.0,
  "keep_temp": bool($KEEP_TEMP),
 }, open(sys.argv[1],"w"))
 PY

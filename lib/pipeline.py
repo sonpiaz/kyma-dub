@@ -369,6 +369,17 @@ def _has_subtitles_filter():
     except Exception:
         return False
 
+def mix_original(video, track, vol, workdir):
+    """Mix the original audio (at `vol`, 0–1) under the full-volume dub —
+    'voiceover dub' style: you still faintly hear the real speaker."""
+    out = os.path.join(workdir, "mixed.m4a")
+    ff(["-i", track, "-i", video, "-filter_complex",
+        f"[0:a]volume=1.0[d];[1:a]volume={vol:.3f}[o];"
+        "[d][o]amix=inputs=2:duration=first:normalize=0[a]",
+        "-map", "[a]", "-c:a", "aac", "-b:a", "192k", out])
+    return out
+
+
 def burn(video, track, srt_path, out):
     # Re-encode the video with subtitles burned in (needs libass). Returns
     # False if this ffmpeg can't render text, so the caller can fall back.
@@ -411,48 +422,43 @@ def main():
             tag = f"speed={speed:.2f}" if speed > 1.0 else f"+{c['dur'] - spoken:.1f}s pause"
             log(f"  chunk {c['i']:>2} slot={c['dur']:>5.1f}s spoken={spoken:>5.1f}s {tag}")
         track = assemble(chunks, total_dur, workdir)
+
+        # Optional voiceover-dub: keep the original audio faintly under the dub.
+        final_audio = track
+        if cfg.get("keep_original"):
+            final_audio = mix_original(video, track, cfg["keep_original"], workdir)
+            log(f"keeping original audio at {round(cfg['keep_original'] * 100)}% under the dub")
+
+        W, H = bl.video_dims(video)
+        ff = bl.resolve_libass_ffmpeg()
+        no_libass = ("note: this ffmpeg has no libass — captions can't be burned in. "
+                     "Wrote the dubbed video + subtitle file instead. Run `kyma-dub setup-ffmpeg`.")
+
         if cfg.get("bilingual"):
-            bcues = bl.bilingual_cues(cfg, segs)
-            W, H = bl.video_dims(video)
-            ass = os.path.join(workdir, "bilingual.ass")
-            bl.write_ass(bcues, ass, W, H)
-            ff = bl.resolve_libass_ffmpeg()
+            cues = bl.bilingual_cues(cfg, segs)
             if cfg.get("burn") and ff:
-                log("burning bilingual subtitles into the dubbed video (re-encoding)…")
-                bl.burn_ass(ff, video, ass, cfg["out"], audio_track=track)
+                ass = os.path.join(workdir, "subs.ass"); bl.write_ass(cues, ass, W, H)
+                log("burning bilingual captions into the video (re-encoding)…")
+                bl.burn_ass(ff, video, ass, cfg["out"], audio_track=final_audio)
             else:
-                out_ass = os.path.splitext(cfg["out"])[0] + ".ass"
-                bl.write_ass(bcues, out_ass, W, H)
-                mux(video, track, cfg["out"])
-                if cfg.get("burn"):
-                    log("note: no libass ffmpeg found — wrote the dubbed video + bilingual subtitles:")
-                    log(f"  {out_ass}")
-                    log("  Run `kyma-dub setup-ffmpeg` to enable burning, or load the .ass in a player.")
-                else:
-                    log(f"bilingual subtitles -> {out_ass}")
+                out_ass = os.path.splitext(cfg["out"])[0] + ".ass"; bl.write_ass(cues, out_ass, W, H)
+                mux(video, final_audio, cfg["out"])
+                log(no_libass + f"\n  {out_ass}" if cfg.get("burn") else f"bilingual captions -> {out_ass}")
         elif cfg.get("burn") or cfg.get("srt"):
             cues = build_dub_subcues(chunks)
             if cfg.get("srt"):
-                out_srt = os.path.splitext(cfg["out"])[0] + ".srt"
-                write_srt(cues, out_srt); log(f"subtitles -> {out_srt}")
-            if cfg.get("burn"):
-                wsrt = os.path.join(workdir, "subs.srt"); write_srt(cues, wsrt)
-                log("burning subtitles into video (re-encoding)…")
-                if not burn(video, track, wsrt, cfg["out"]):
-                    out_srt = os.path.splitext(cfg["out"])[0] + ".srt"
-                    write_srt(cues, out_srt)
-                    mux(video, track, cfg["out"])
-                    log("note: this ffmpeg was built without libass, so captions can't be "
-                        "burned in — wrote the dubbed video + a synced .srt instead:")
-                    log(f"  {out_srt}")
-                    log("  Use it as a soft subtitle, or import it in an editor (CapCut, "
-                        "Premiere) to burn with full styling.")
-                    log("  For in-tool --burn, use an ffmpeg with libass (most Linux/static "
-                        "builds have it; on macOS use a static build or the homebrew-ffmpeg tap).")
+                out_srt = os.path.splitext(cfg["out"])[0] + ".srt"; write_srt(cues, out_srt); log(f"subtitles -> {out_srt}")
+            if cfg.get("burn") and ff:
+                ass = os.path.join(workdir, "subs.ass"); bl.write_ass_mono(cues, ass, W, H)
+                log("burning captions into the video (re-encoding)…")
+                bl.burn_ass(ff, video, ass, cfg["out"], audio_track=final_audio)
+            elif cfg.get("burn"):
+                out_srt = os.path.splitext(cfg["out"])[0] + ".srt"; write_srt(cues, out_srt)
+                mux(video, final_audio, cfg["out"]); log(no_libass + f"\n  {out_srt}")
             else:
-                mux(video, track, cfg["out"])
+                mux(video, final_audio, cfg["out"])
         else:
-            mux(video, track, cfg["out"])
+            mux(video, final_audio, cfg["out"])
         log(f"done -> {cfg['out']}")
         print(cfg["out"])
     finally:

@@ -114,6 +114,27 @@ def write_ass(cues, path, width, height):
     open(path, "w").write("\n".join(lines) + "\n")
 
 
+def write_ass_mono(cues, path, width, height):
+    """Single-language styled captions (white, bold, outlined, centred band)."""
+    fs = int(height * 0.044); margin = 200
+    hdr = (
+        "[Script Info]\nScriptType: v4.00+\n"
+        f"PlayResX: {width}\nPlayResY: {height}\nWrapStyle: 0\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+        "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: M,Arial,{fs},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,"
+        f"0,0,1,3,2,2,{margin},{margin},90,1\n\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+    lines = [hdr]
+    for c in cues:
+        t = (c.get("text") or c.get("en") or "").replace("\n", " ").strip()
+        lines.append(f"Dialogue: 0,{_ass_ts(c['start'])},{_ass_ts(c['end'])},M,,0,0,0,,{t}")
+    open(path, "w").write("\n".join(lines) + "\n")
+
+
 def video_dims(video):
     out = subprocess.check_output(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
