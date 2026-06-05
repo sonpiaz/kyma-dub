@@ -20,7 +20,7 @@ Routing (see lib/env.sh):
   Layers 1-3 share the ElevenLabs upstream; only layer 4 is a truly
   independent provider, so it only runs with allow_voice_fallback=true.
 """
-import sys, os, json, re, subprocess, tempfile, shutil, urllib.request, urllib.error
+import sys, os, json, re, subprocess, tempfile, shutil, time, urllib.request, urllib.error
 import bilingual as bl
 
 # friendly voice name -> ElevenLabs voice id
@@ -92,18 +92,42 @@ def transcribe(cfg, audio):
         endpoint = "https://api.groq.com/openai/v1/audio/transcriptions"
         auth = "Bearer " + cfg["groq_key"]; model = "whisper-large-v3"
     # curl handles multipart + the explicit MIME type Kyma requires.
-    args = ["curl", "-sS", "-X", "POST", "-H", "Authorization: " + auth,
+    args = ["curl", "-sS", "--max-time", "180", "-X", "POST",
+            "-H", "Authorization: " + auth,
             "-H", "User-Agent: " + cfg["ua"],
             "-F", f"file=@{audio};type=audio/mpeg",
             "-F", "model=" + model, "-F", "response_format=verbose_json"]
     if cfg.get("source_lang") and cfg["source_lang"] != "auto":
         args += ["-F", "language=" + cfg["source_lang"]]
     args += [endpoint]
-    out = subprocess.check_output(args)
-    d = json.loads(out)
-    if "segments" not in d or not d["segments"]:
-        die("transcription returned no segments: " + out.decode()[:200])
-    return d["segments"], d.get("language", cfg.get("source_lang", "?"))
+    # Defense-in-depth retry. The gateway already retries + fails over on its
+    # side, so a transient hiccup almost never reaches here — but a dropped
+    # connection or a rare unrecovered blip shouldn't kill a whole dub. Retry a
+    # few times with backoff before giving up; never substitute a different
+    # service, just try the same call again.
+    last = "unknown error"
+    for attempt in range(3):
+        if attempt:
+            time.sleep(0.6 * (2 ** (attempt - 1)))  # 0.6s, 1.2s
+            log(f"transcription hiccup — retry {attempt}/2…")
+        proc = subprocess.run(args, capture_output=True)
+        if proc.returncode != 0:
+            last = (proc.stderr or b"").decode(errors="replace").strip()[:200] or f"curl exit {proc.returncode}"
+            continue
+        try:
+            d = json.loads(proc.stdout)
+        except Exception:
+            last = proc.stdout.decode(errors="replace").strip()[:200] or "empty response"
+            continue
+        if isinstance(d, dict) and d.get("error"):
+            err = d["error"]
+            last = (err.get("message") if isinstance(err, dict) else str(err))[:200]
+            continue
+        segs = d.get("segments") if isinstance(d, dict) else None
+        if segs:
+            return segs, d.get("language", cfg.get("source_lang", "?"))
+        last = "no segments returned"
+    die(f"transcription failed after 3 attempts ({last}). Please try again in a moment.")
 
 
 # ── 3. chunk by natural speech pauses ───────────────────────────────
