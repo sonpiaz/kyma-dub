@@ -63,11 +63,11 @@ KYMA_API_KEY=kyma-xxxxxxxx        # transcribe + translate + voice
 # ELEVENLABS_API_KEY=xi-xxxxxxxx  # optional: direct voice path / deep fallback
 ```
 
-Get a Kyma key at [kymaapi.com](https://kymaapi.com?utm_source=kyma-dub). About 60 seconds, no card, free credit at signup.
+Get a Kyma key at [kymaapi.com](https://kymaapi.com?utm_source=kyma-dub). About 60 seconds, no card.
 
 **Dependencies:** `ffmpeg`, `ffprobe`, `curl`, `python3` (`brew install ffmpeg`).
 
-Runs on [Kyma API](https://kymaapi.com?utm_source=kyma-dub): one key for transcribe (`POST https://kymaapi.com/v1/audio/transcriptions`), translate (`POST https://kymaapi.com/v1/chat/completions`), and speech (`POST https://kymaapi.com/v1/audio/speech`). Pick any live translation model with `--model` (default `qwen-3.7-max`); see `kyma-dub models`.
+Runs on [Kyma API](https://kymaapi.com?utm_source=kyma-dub): one key for transcribe (`POST https://kymaapi.com/v1/audio/transcriptions`), translate (`POST https://kymaapi.com/v1/chat/completions`), and speech (`POST https://kymaapi.com/v1/audio/speech`). Pick any live translation model with `--model` (default [`qwen-3.7-max`](https://kymaapi.com/models/qwen-3.7-max?utm_source=kyma-dub)); see `kyma-dub models`.
 
 ## Dub
 
